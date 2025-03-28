@@ -8,6 +8,7 @@ import { FiArrowLeft, FiEye, FiEyeOff } from 'react-icons/fi';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -18,7 +19,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await signup(email, password);
+      await signup(email, password, username);
       toast.success('Account created successfully');
       router.push('/login');
     } catch (error: unknown) {
@@ -63,6 +64,22 @@ export default function SignupPage() {
                 placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="username" className="sr-only">
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
             </div>
             <div className="relative">

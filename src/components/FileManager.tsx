@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask } from 'firebase/storage';
-import { storage } from '@app/lib/firebase';
-import { useAuth } from '@app/contexts/AuthContext';
+import { storage } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload } from 'react-icons/fi';
 import Image from 'next/image';
@@ -189,11 +189,26 @@ export default function FileManager() {
     }
   };
 
-  const handleFileClick = (file: FileItem) => {
-    console.log('File clicked:', file);
-    if (file.type === 'file') {
-      console.log('Setting preview file:', file);
-      setPreviewFile(file);
+  const handleFileClick = async (file: FileItem) => {
+    if (file.type === 'folder') {
+      handleFolderClick(file);
+    } else {
+      try {
+        // Record file access
+        await fetch('/api/file-access', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ filePath: file.path }),
+        });
+
+        // Set the file for preview
+        setPreviewFile(file);
+      } catch (error) {
+        console.error('Error accessing file:', error);
+        toast.error('Failed to access file');
+      }
     }
   };
 
@@ -284,9 +299,22 @@ export default function FileManager() {
     setCurrentFolder(path);
   };
 
-  const navigateUp = () => {
-    const parentPath = currentFolder.split('/').slice(0, -1).join('/');
-    setCurrentFolder(parentPath);
+  const navigateUp = async () => {
+    try {
+      const parentPath = currentFolder.split('/').slice(0, -1).join('/');
+      // Record folder access
+      await fetch('/api/file-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filePath: parentPath || 'files' }),
+      });
+      setCurrentFolder(parentPath);
+    } catch (error) {
+      console.error('Error navigating up:', error);
+      toast.error('Failed to navigate up');
+    }
   };
 
   const filteredItems = files.filter(item =>
@@ -353,6 +381,24 @@ export default function FileManager() {
     } catch (error) {
       console.error('Error deleting folder:', error);
       toast.error('Failed to delete folder');
+    }
+  };
+
+  const handleFolderClick = async (folder: FileItem) => {
+    try {
+      // Record folder access
+      await fetch('/api/file-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filePath: folder.path }),
+      });
+
+      setCurrentFolder(folder.path);
+    } catch (error) {
+      console.error('Error accessing folder:', error);
+      toast.error('Failed to access folder');
     }
   };
 

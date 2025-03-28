@@ -26,7 +26,8 @@ export async function GET() {
     const users = listUsersResult.users.map(user => ({
       id: user.uid,
       email: user.email || '',
-      role: user.email?.includes('admin') ? 'admin' : 'viewer'
+      role: user.email?.includes('admin') ? 'admin' : 'viewer',
+      displayName: user.displayName || ''
     }));
 
     return NextResponse.json({ users });

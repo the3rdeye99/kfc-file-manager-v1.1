@@ -4,18 +4,21 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiArrowLeft } from 'react-icons/fi';
-import { deleteUser } from '@/app/actions/userActions';
+import { FiTrash2, FiArrowLeft, FiEdit2, FiX } from 'react-icons/fi';
+import { deleteUser, updateUser } from '@/app/actions/userActions';
 
 interface User {
   id: string;
   email: string;
   role: 'admin' | 'viewer';
+  displayName: string;
 }
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [newName, setNewName] = useState('');
   const { user } = useAuth();
   const router = useRouter();
 
@@ -46,6 +49,15 @@ export default function UserManagement() {
   }
 
   const handleDeleteUser = async (userId: string) => {
+    // Find the user to be deleted
+    const userToDelete = users.find(user => user.id === userId);
+    
+    // Check if the user is an admin
+    if (userToDelete?.role === 'admin') {
+      toast.error('Cannot delete admin users');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
       return;
     }
@@ -62,6 +74,37 @@ export default function UserManagement() {
     } catch (error) {
       console.error('Error deleting user:', error);
       toast.error('Failed to delete user');
+    }
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setNewName(user.displayName || '');
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser || !newName.trim()) {
+      toast.error('Please enter a valid name');
+      return;
+    }
+
+    try {
+      const result = await updateUser(editingUser.id, newName);
+      
+      if (result.success) {
+        setUsers(users.map(user => 
+          user.id === editingUser.id 
+            ? { ...user, displayName: newName }
+            : user
+        ));
+        setEditingUser(null);
+        toast.success('User updated successfully');
+      } else {
+        toast.error(result.error || 'Failed to update user');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      toast.error('Failed to update user');
     }
   };
 
@@ -101,19 +144,33 @@ export default function UserManagement() {
                         }`} />
                       </div>
                       <div className="ml-3">
-                        <p className="text-sm font-medium text-black">{user.email}</p>
+                        <p className="text-sm font-medium text-black">{user.displayName || 'No name set'}</p>
+                        <p className="text-sm text-gray-500">{user.email}</p>
                         <p className="text-sm text-gray-500 capitalize">{user.role}</p>
                       </div>
                     </div>
-                    {user.email !== 'admin@example.com' && (
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-700 flex items-center gap-1"
-                      >
-                        <FiTrash2 />
-                        Delete
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {user.email !== 'admin@example.com' && (
+                        <>
+                          <button
+                            onClick={() => handleEditUser(user)}
+                            className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            <FiEdit2 />
+                            Edit
+                          </button>
+                          {user.role !== 'admin' && (
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                            >
+                              <FiTrash2 />
+                              Delete
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </li>
               ))}
@@ -121,6 +178,51 @@ export default function UserManagement() {
           </div>
         </div>
       </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Edit User</h3>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  User Name
+                </label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  placeholder="Enter user name"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateUser}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
