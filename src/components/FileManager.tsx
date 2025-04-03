@@ -5,7 +5,7 @@ import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, Uploa
 import { storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave } from 'react-icons/fi';
+import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload } from 'react-icons/fi';
 import Image from 'next/image';
 
 interface FileItem {
@@ -668,105 +668,89 @@ export default function FileManager() {
   const renderPreview = () => {
     if (!previewFile) return null;
 
-    const fileType = getFileType(previewFile.name);
-    const isImage = fileType.startsWith('image/');
-    const isPDF = fileType === 'application/pdf';
-    const isText = fileType === 'text/plain';
+    const fileExtension = previewFile.name.split('.').pop()?.toLowerCase();
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
+    const isPDF = fileExtension === 'pdf';
+    const isVideo = ['mp4', 'webm', 'ogg'].includes(fileExtension || '');
+    const isAudio = ['mp3', 'wav', 'ogg', 'aac'].includes(fileExtension || '');
+    const isText = ['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '');
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-          <div className="flex justify-between items-center p-4 border-b">
-            <h3 className="text-lg font-semibold text-black">{previewFile.name}</h3>
-            <div className="flex items-center gap-2">
-              {isAdmin && isText && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-lg p-4 w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-black truncate max-w-[80%]">{previewFile.name}</h2>
             <button
-                  onClick={() => setIsEditingContent(!isEditingContent)}
-                  className="text-blue-500 hover:text-blue-600"
-                >
-                  {isEditingContent ? 'Preview' : 'Edit'}
-                </button>
-              )}
-            <button
-                onClick={() => {
-                  setPreviewFile(null);
-                  setIsEditingContent(false);
-                  setEditingContent('');
-                }}
+              onClick={() => setPreviewFile(null)}
               className="text-gray-500 hover:text-gray-700"
             >
-              <FiX size={24} />
+              <FiX className="w-6 h-6" />
             </button>
-            </div>
           </div>
-          <div className="p-4 h-[calc(90vh-4rem)] overflow-auto">
-            {isEditingContent ? (
-              <div className="h-full flex flex-col">
-                <textarea
-                  value={editingContent}
-                  onChange={(e) => setEditingContent(e.target.value)}
-                  className="flex-1 w-full p-2 border rounded font-mono text-sm text-black"
+          <div className="flex-1 overflow-auto">
+            {isImage ? (
+              <div className="flex justify-center items-center h-full">
+                <img
+                  src={previewFile.url}
+                  alt={previewFile.name}
+                  className="max-h-[70vh] max-w-full object-contain"
                 />
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={handleSaveContent}
-                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                  >
-                    Save Changes
-                  </button>
-                </div>
               </div>
-            ) : (
-              <>
-            {isImage && (
-              <Image
-                src={previewFile.url}
-                alt={previewFile.name}
-                width={800}
-                height={600}
-              />
-            )}
-            {isPDF && (
-              <div className="relative w-full h-full">
-              <iframe
-                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}&scrollbar=1`}
-                className="w-full h-full"
-                title={previewFile.name}
+            ) : isPDF ? (
+              <div className="relative w-full h-[70vh]">
+                <iframe
+                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}`}
+                  className="w-full h-full border-0"
+                  title={previewFile.name}
                   onContextMenu={(e) => !isAdmin && e.preventDefault()}
                 />
                 {!isAdmin && (
                   <div 
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                    className="absolute inset-0 pointer-events-none"
                     onContextMenu={(e) => e.preventDefault()}
-                  />
-                )}
-                {!isAdmin && (
-                  <div 
-                    className="absolute top-0 left-0 w-full h-full" 
-                    onContextMenu={(e) => e.preventDefault()}
-                    style={{ pointerEvents: 'auto' }}
-                  />
+                  ></div>
                 )}
               </div>
-            )}
-            {isText && (
-              <pre className="whitespace-pre-wrap font-mono text-sm text-black">
-                {previewFile.url}
-              </pre>
-            )}
-            {!isImage && !isPDF && !isText && (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Preview not available for this file type</p>
-                <a
-                  href={previewFile.url}
-                  download
-                  className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            ) : isVideo ? (
+              <div className="flex justify-center items-center h-full">
+                <video
+                  src={previewFile.url}
+                  controls
+                  className="max-h-[70vh] max-w-full"
                 >
-                  Download to View
-                </a>
+                  Your browser does not support the video tag.
+                </video>
               </div>
+            ) : isAudio ? (
+              <div className="flex justify-center items-center h-full">
+                <audio
+                  src={previewFile.url}
+                  controls
+                  className="w-full max-w-md"
+                >
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
+            ) : isText ? (
+              <div className="bg-gray-50 p-4 rounded-lg h-full overflow-auto">
+                <pre className="whitespace-pre-wrap text-sm text-black">{previewFile.url}</pre>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <div className="text-6xl mb-4">{getFileIcon(previewFile.name)}</div>
+                <p className="text-gray-600 mb-4">This file type cannot be previewed.</p>
+                {isAdmin && (
+                  <a
+                    href={previewFile.url}
+                    download={previewFile.name}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <FiDownload className="w-5 h-5" />
+                    Download
+                  </a>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
