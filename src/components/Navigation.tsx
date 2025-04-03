@@ -21,6 +21,9 @@ export default function Navigation() {
     }
   };
 
+  // Get username from email (everything before @)
+  const username = user?.email?.split('@')[0] || 'User';
+
   return (
     <nav className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -35,8 +38,8 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             {user && (
               <>
-                <span className="text-gray-700">
-                  {user.email}
+                <span className="text-gray-700 font-medium">
+                  {username}
                 </span>
                 {user.email?.includes('admin') && (
                   <>

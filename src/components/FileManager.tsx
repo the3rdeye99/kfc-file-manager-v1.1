@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave } from 'react-icons/fi';
 import Image from 'next/image';
-import StorageDashboard from './StorageDashboard';
 
 interface FileItem {
   name: string;
@@ -18,6 +17,7 @@ interface FileItem {
   size?: number;
   lastModified?: number;
   category?: 'includes_coo' | 'without_coo';
+  createdAt?: number;
 }
 
 // Helper function to check user permissions
@@ -170,7 +170,9 @@ export default function FileManager() {
               url: '',
               type: 'folder',
               parentFolder: currentFolder,
-              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
+              createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
+              lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined
             };
             return folderItem;
           } catch (error) {
@@ -234,23 +236,23 @@ export default function FileManager() {
         }
         
         const folderRef = ref(storage, folderPath);
-      const result = await listAll(folderRef);
-      
+        const result = await listAll(folderRef);
+        
         // Process files in current folder
-      const filePromises = result.items.map(async (item) => {
-        const url = await getDownloadURL(item);
+        const filePromises = result.items.map(async (item) => {
+          const url = await getDownloadURL(item);
           const metadata = await getMetadata(item);
-        return {
-          name: item.name,
-          url,
-          path: item.fullPath,
-          type: 'file' as const,
+          return {
+            name: item.name,
+            url,
+            path: item.fullPath,
+            type: 'file' as const,
             parentFolder: folderPath.replace('files/', ''),
             size: metadata.size,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
             category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
-        };
-      });
+          };
+        });
 
         const files = await Promise.all(filePromises);
         allItems.push(...files);
@@ -269,12 +271,14 @@ export default function FileManager() {
             }
             
             const folderItem = {
-        name: prefix.name,
-        url: '',
-        path: prefix.fullPath,
-        type: 'folder' as const,
+              name: prefix.name,
+              url: '',
+              path: prefix.fullPath,
+              type: 'folder' as const,
               parentFolder: folderPath.replace('files/', ''),
-              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
+              createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
+              lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined
             };
             allItems.push(folderItem);
             await loadFolderContents(prefix.fullPath);
@@ -724,10 +728,10 @@ export default function FileManager() {
             )}
             {isPDF && (
               <div className="relative w-full h-full">
-                <iframe
+              <iframe
                   src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}&scrollbar=1`}
-                  className="w-full h-full"
-                  title={previewFile.name}
+                className="w-full h-full"
+                title={previewFile.name}
                   onContextMenu={(e) => !isAdmin && e.preventDefault()}
                 />
                 {!isAdmin && (
@@ -820,7 +824,11 @@ export default function FileManager() {
       
       // Create an empty file to represent the folder
       const emptyBlob = new Blob([''], { type: 'text/plain' });
-      await uploadBytesResumable(placeholderRef, emptyBlob);
+      await uploadBytesResumable(placeholderRef, emptyBlob, {
+        customMetadata: {
+          category: newFolderCategory
+        }
+      });
       
       toast.success('Folder created successfully');
       setNewFolderName('');
@@ -925,125 +933,263 @@ export default function FileManager() {
   };
 
   return (
-    <div className="flex gap-6 p-6">
-      <div className="flex-1">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-semibold text-black">File Manager</h1>
-              {currentFolder && (
-                <button
-                  onClick={navigateUp}
-                  className="text-blue-500 hover:text-blue-600"
-                >
-                  Back
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value as 'all' | 'includes_coo' | 'without_coo')}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-                >
-                  <option value="all">All Files</option>
-                  <option value="includes_coo">Includes C of O</option>
-                  <option value="without_coo">Without C of O</option>
-                </select>
-              </div>
+    <div className="w-full">
+      <div className="bg-white rounded-lg shadow-md p-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold text-black">Files</h1>
+            {currentFolder && (
               <button
-                onClick={handleRefresh}
-                className={`p-2 rounded ${isRefreshing ? 'bg-blue-100 text-blue-600 animate-spin' : 'text-gray-500 hover:text-gray-700'}`}
-                disabled={isRefreshing}
-                title="Refresh files"
+                onClick={navigateUp}
+                className="text-blue-500 hover:text-blue-600"
               >
-                <FiRefreshCw className="w-5 h-5" />
+                Back
               </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded ${
-                    viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
-                  }`}
-                >
-                  <FiGrid className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded ${
-                    viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
-                  }`}
-                >
-                  <FiList className="w-5 h-5" />
-                </button>
-              </div>
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowNewFolderInput(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    <FiFolderPlus className="w-5 h-5" />
-                    New Folder
-                  </button>
-                  <label className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer">
-                    <FiUpload className="w-5 h-5" />
-                    Upload File
-                  <input
-                    type="file"
-                    className="hidden"
-                      onChange={handleUpload}
-                    disabled={uploading}
-                  />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files and folders..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-            />
-            {isSearching && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-          </div>
             )}
           </div>
-          {searchQuery && (
-            <div className="mt-2 text-sm text-gray-500">
-              Searching all folders for "{searchQuery}"...
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value as 'all' | 'includes_coo' | 'without_coo')}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+            >
+              <option value="all">All Files</option>
+              <option value="includes_coo">Includes C of O</option>
+              <option value="without_coo">Without C of O</option>
+            </select>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className={`p-2 rounded ${isRefreshing ? 'bg-blue-100 text-blue-600 animate-spin' : 'text-gray-500 hover:text-gray-700'}`}
+            disabled={isRefreshing}
+            title="Refresh files"
+          >
+            <FiRefreshCw className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded ${
+                viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
+              }`}
+            >
+              <FiGrid className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded ${
+                viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
+              }`}
+            >
+              <FiList className="w-5 h-5" />
+            </button>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setShowNewFolderInput(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                title="Create new folder"
+              >
+                <FiFolderPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Folder</span>
+              </button>
+              <label className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer text-sm" title="Upload file">
+                <FiUpload className="w-4 h-4" />
+                <span className="hidden sm:inline">Upload</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={handleUpload}
+                  disabled={uploading}
+                />
+              </label>
             </div>
           )}
-          {showNewFolderInput && (
-            <div className="flex items-center space-x-2 mt-4">
+        </div>
+        <div className="relative mb-4">
+          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files and folders..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+            </div>
+          )}
+        </div>
+        {searchQuery && (
+          <div className="mt-2 text-sm text-gray-500">
+            Searching all folders for "{searchQuery}"...
+          </div>
+        )}
+        <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
+          {filteredItems.length > 0 ? (
+            filteredItems.map((item) => (
+              <div
+                key={item.path}
+                className={`${
+                  viewMode === 'grid'
+                    ? 'p-4 border rounded-lg hover:bg-gray-50 cursor-pointer relative'
+                    : 'p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex items-center justify-between'
+                }`}
+                onClick={() => handleFileClick(item)}
+              >
+                <div className={`flex ${viewMode === 'list' ? 'items-center gap-3' : 'flex-col items-center'}`}>
+                  {item.type === 'folder' ? (
+                    <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} text-blue-500`} />
+                  ) : (
+                    <div className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} flex items-center justify-center`}>
+                      {getFileIcon(item.name)}
+                    </div>
+                  )}
+                  <div className={viewMode === 'grid' ? 'text-center' : ''}>
+                    {editingItem?.path === item.path ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          className="px-2 py-1 border rounded text-black"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRename(item, newName);
+                          }}
+                          className="text-green-500 hover:text-green-600"
+                        >
+                          <FiSave className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingItem(null);
+                            setNewName('');
+                          }}
+                          className="text-red-500 hover:text-red-600"
+                        >
+                          <FiX className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
+                        {item.name}
+                      </div>
+                    )}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 text-xs text-gray-500">
+                      {item.size !== undefined && (
+                        <span className="whitespace-nowrap">{formatBytes(item.size)}</span>
+                      )}
+                      {item.type === 'folder' && item.createdAt ? (
+                        <span className="whitespace-nowrap" title="Created">
+                          Created: {new Date(item.createdAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      ) : item.lastModified ? (
+                        <span className="whitespace-nowrap" title="Modified">
+                          {new Date(item.lastModified).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      ) : null}
+                    </div>
+                    {searchQuery && (
+                      <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                        {item.path}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingItem(item);
+                        setNewName(item.name);
+                      }}
+                      className="text-blue-500 hover:text-blue-700"
+                    >
+                      <FiEdit2 className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (item.type === 'folder') {
+                          handleDeleteFolder(item.path);
+                        } else {
+                          handleDelete(item.path);
+                        }
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <FiTrash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-gray-500 py-4 col-span-full">
+              {searchQuery ? 'No matching files and folders found' : 'No files and folders'}
+            </p>
+          )}
+        </div>
+      </div>
+      {renderPreview()}
+      
+      {/* New Folder Modal */}
+      {showNewFolderInput && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">Create New Folder</h2>
+              <button 
+                onClick={() => {
+                  setShowNewFolderInput(false);
+                  setNewFolderName('');
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Folder Name</label>
               <input
                 type="text"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Enter folder name"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                autoFocus
               />
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
                 value={newFolderCategory}
                 onChange={(e) => setNewFolderCategory(e.target.value as 'includes_coo' | 'without_coo')}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
               >
                 <option value="includes_coo">Includes C of O</option>
                 <option value="without_coo">Without C of O</option>
               </select>
-              <button
-                onClick={createFolder}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
-              >
-                Create
-              </button>
+            </div>
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowNewFolderInput(false);
@@ -1053,119 +1199,16 @@ export default function FileManager() {
               >
                 Cancel
               </button>
-            </div>
-          )}
-          <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
-            {filteredItems.length > 0 ? (
-              filteredItems.map((item) => (
-              <div
-                key={item.path}
-                className={`${
-                  viewMode === 'grid'
-                      ? 'p-4 border rounded-lg hover:bg-gray-50 cursor-pointer relative'
-                      : 'p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex items-center justify-between'
-                }`}
-                onClick={() => handleFileClick(item)}
+              <button
+                onClick={createFolder}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
               >
-                  <div className={`flex ${viewMode === 'list' ? 'items-center gap-3' : 'flex-col items-center'}`}>
-                  {item.type === 'folder' ? (
-                      <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} text-blue-500`} />
-                    ) : (
-                      <div className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} flex items-center justify-center`}>
-                        {getFileIcon(item.name)}
-                      </div>
-                    )}
-                    <div className={viewMode === 'grid' ? 'text-center' : ''}>
-                      {editingItem?.path === item.path ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            className="px-2 py-1 border rounded text-black"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                              handleRename(item, newName);
-                        }}
-                            className="text-green-500 hover:text-green-600"
-                      >
-                            <FiSave className="w-4 h-4" />
-                      </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                              setEditingItem(null);
-                              setNewName('');
-                          }}
-                            className="text-red-500 hover:text-red-600"
-                        >
-                            <FiX className="w-4 h-4" />
-                        </button>
-                    </div>
-                  ) : (
-                        <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
-                          {item.name}
-                        </div>
-                      )}
-                      {item.size !== undefined && (
-                        <div className="text-xs text-gray-500">{formatBytes(item.size)}</div>
-                      )}
-                      {item.lastModified && (
-                        <div className="text-xs text-gray-500">
-                          {new Date(item.lastModified).toLocaleDateString()}
-                        </div>
-                      )}
-                      {searchQuery && (
-                        <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                          {item.path}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                        {isAdmin && (
-                    <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                          setEditingItem(item);
-                          setNewName(item.name);
-                        }}
-                        className="text-blue-500 hover:text-blue-700"
-                      >
-                        <FiEdit2 className="w-5 h-5" />
-                      </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          if (item.type === 'folder') {
-                            handleDeleteFolder(item.path);
-                          } else {
-                              handleDelete(item.path);
-                          }
-                            }}
-                        className="text-red-500 hover:text-red-700"
-                          >
-                        <FiTrash2 className="w-5 h-5" />
-                          </button>
-                      </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-center text-gray-500 py-4 col-span-full">
-                {searchQuery ? 'No matching files and folders found' : 'No files and folders'}
-              </p>
-            )}
+                Create
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-      <div className="w-80">
-        <StorageDashboard />
-      </div>
-      {renderPreview()}
+      )}
     </div>
   );
 }

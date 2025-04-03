@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ref, listAll, getMetadata } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import { FiHardDrive, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiFile as FiDocument, FiRefreshCw } from 'react-icons/fi';
+import { FiHardDrive, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiFile as FiDocument, FiRefreshCw, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 interface StorageStats {
   totalSize: number;
@@ -88,6 +88,7 @@ export default function StorageDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const calculateStorageStats = async () => {
     try {
@@ -261,50 +262,67 @@ export default function StorageDashboard() {
   }, []);
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="bg-white rounded-lg shadow-md p-3">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <FiHardDrive className="w-6 h-6 text-blue-500" />
-          <h2 className="text-xl font-semibold text-black">Storage Dashboard</h2>
+          <FiHardDrive className="w-5 h-5 text-blue-500" />
+          <h2 className="text-lg font-semibold text-black">Storage Dashboard</h2>
         </div>
-        <button 
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-          title="Refresh storage stats"
-        >
-          <FiRefreshCw className={`w-5 h-5 text-blue-500 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+            title="Refresh storage stats"
+          >
+            <FiRefreshCw className={`w-4 h-4 text-blue-500 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+            title={isExpanded ? "Hide details" : "Show details"}
+          >
+            {isExpanded ? (
+              <FiChevronUp className="w-4 h-4 text-blue-500" />
+            ) : (
+              <FiChevronDown className="w-4 h-4 text-blue-500" />
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="mb-6">
-        <div className="text-sm text-gray-500 mb-1">Total Storage Used</div>
-        <div className="text-2xl font-bold text-black">{formatBytes(stats.totalSize)}</div>
+      <div className="mb-3">
+        <div className="text-xs text-gray-500 mb-0.5">Total Storage Used</div>
+        <div className="text-xl font-bold text-black">{formatBytes(stats.totalSize)}</div>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-black">File Types</h3>
-        {loading ? (
-          <div className="flex justify-center py-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        ) : Object.entries(stats.fileTypes).length > 0 ? (
-          Object.entries(stats.fileTypes).map(([type, data]) => (
-            <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                {getFileTypeIcon(type)}
-                <div>
-                  <div className="text-sm font-medium text-black">{getFileTypeName(type)}</div>
-                  <div className="text-xs text-gray-500">{data.count} files</div>
-                </div>
-              </div>
-              <div className="text-sm font-medium text-black">{formatBytes(data.size)}</div>
+      {isExpanded && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-black">File Types</h3>
+          {loading ? (
+            <div className="flex justify-center py-2">
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
             </div>
-          ))
-        ) : (
-          <div className="text-center py-4 text-gray-500">No files found</div>
-        )}
-      </div>
+          ) : Object.entries(stats.fileTypes).length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {Object.entries(stats.fileTypes).map(([type, data]) => (
+                <div key={type} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {getFileTypeIcon(type)}
+                    <div>
+                      <div className="text-xs font-medium text-black">{getFileTypeName(type)}</div>
+                      <div className="text-xs text-gray-500">{data.count} files</div>
+                    </div>
+                  </div>
+                  <div className="text-xs font-medium text-black">{formatBytes(data.size)}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-2 text-gray-500 text-xs">No files found</div>
+          )}
+        </div>
+      )}
     </div>
   );
 } 

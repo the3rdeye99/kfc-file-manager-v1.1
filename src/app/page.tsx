@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@app/contexts/AuthContext';
 import FileManager from '@app/components/FileManager';
 import Navigation from '@app/components/Navigation';
+import StorageDashboard from '@app/components/StorageDashboard';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -32,7 +33,14 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       <Navigation />
       <main className="container mx-auto px-4 py-8">
-        <FileManager />
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <StorageDashboard />
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <FileManager />
+          </div>
+        </div>
       </main>
     </div>
   );
