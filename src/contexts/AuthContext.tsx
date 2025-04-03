@@ -25,6 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Clear session on app load in production
+    if (process.env.NODE_ENV === 'production') {
+      fetch('/api/auth/session', { method: 'DELETE' });
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Get the ID token
