@@ -15,8 +15,7 @@ export default function Login() {
   const router = useRouter();
 
   useEffect(() => {
-    // Only auto-redirect in development
-    if (process.env.NODE_ENV !== 'production' && user) {
+    if (user) {
       router.push('/');
     }
   }, [user, router]);

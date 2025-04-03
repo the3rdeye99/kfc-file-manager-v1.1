@@ -11,12 +11,6 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // Always redirect to login in production
-    if (process.env.NODE_ENV === 'production') {
-      router.push('/login');
-      return;
-    }
-
     if (!loading && !user) {
       router.push('/login');
     }
