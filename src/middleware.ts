@@ -19,13 +19,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
   
-  // Add a Cache-Control header to prevent caching of protected routes
-  const response = NextResponse.next();
-  response.headers.set('Cache-Control', 'no-store, must-revalidate');
-  response.headers.set('Pragma', 'no-cache');
-  response.headers.set('Expires', '0');
-  
-  return response;
+  return NextResponse.next();
 }
 
 // See "Matching Paths" below to learn more

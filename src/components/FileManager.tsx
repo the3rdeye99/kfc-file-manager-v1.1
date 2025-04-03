@@ -123,8 +123,6 @@ export default function FileManager() {
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'includes_coo' | 'without_coo'>('all');
   const [newFolderCategory, setNewFolderCategory] = useState<'includes_coo' | 'without_coo'>('includes_coo');
-  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
-  const [textContent, setTextContent] = useState('');
 
   const loadFiles = useCallback(async () => {
     try {
@@ -142,6 +140,19 @@ export default function FileManager() {
         try {
           const url = await getDownloadURL(item);
           const metadata = await getMetadata(item);
+          
+          // Get the folder's category if available
+          let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
+          if (currentFolder) {
+            const placeholderRef = ref(storage, `files/${currentFolder}/.placeholder`);
+            try {
+              const folderMetadata = await getMetadata(placeholderRef);
+              folderCategory = (folderMetadata.customMetadata?.category as 'includes_coo' | 'without_coo') || 'includes_coo';
+            } catch (error) {
+              console.error('Error getting folder category:', error);
+            }
+          }
+          
           const fileItem: FileItem = {
             name: item.name,
             path: item.fullPath,
@@ -150,7 +161,7 @@ export default function FileManager() {
             size: metadata.size,
             parentFolder: currentFolder,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-            category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+            category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo' || folderCategory
           };
           return fileItem;
         } catch (error) {
@@ -187,21 +198,15 @@ export default function FileManager() {
         }
       });
       
-      // Wait for all promises to resolve
       const [files, folders] = await Promise.all([
         Promise.all(filePromises),
         Promise.all(folderPromises)
       ]);
       
-      // Filter out null values and sort
-      const validFiles = files.filter((file): file is FileItem => file !== null && file.type === 'file');
-      const validFolders = folders.filter((folder): folder is FileItem => folder !== null && folder.type === 'folder');
+      const validFiles = files.filter((file): file is FileItem => file !== null);
+      const validFolders = folders.filter((folder): folder is FileItem => folder !== null);
       
-      // Sort items: folders first, then files, both alphabetically
-      const sortedFolders = validFolders.sort((a, b) => a.name.localeCompare(b.name));
-      const sortedFiles = validFiles.sort((a, b) => a.name.localeCompare(b.name));
-      
-      setFiles([...sortedFolders, ...sortedFiles]);
+      setFiles([...validFolders, ...validFiles]);
     } catch (error) {
       console.error('Error loading files:', error);
       toast.error('Failed to load files');
@@ -238,23 +243,23 @@ export default function FileManager() {
         }
         
         const folderRef = ref(storage, folderPath);
-        const result = await listAll(folderRef);
-        
+      const result = await listAll(folderRef);
+      
         // Process files in current folder
-        const filePromises = result.items.map(async (item) => {
-          const url = await getDownloadURL(item);
+      const filePromises = result.items.map(async (item) => {
+        const url = await getDownloadURL(item);
           const metadata = await getMetadata(item);
-          return {
-            name: item.name,
-            url,
-            path: item.fullPath,
-            type: 'file' as const,
+        return {
+          name: item.name,
+          url,
+          path: item.fullPath,
+          type: 'file' as const,
             parentFolder: folderPath.replace('files/', ''),
             size: metadata.size,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
             category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
-          };
-        });
+        };
+      });
 
         const files = await Promise.all(filePromises);
         allItems.push(...files);
@@ -273,10 +278,10 @@ export default function FileManager() {
             }
             
             const folderItem = {
-              name: prefix.name,
-              url: '',
-              path: prefix.fullPath,
-              type: 'folder' as const,
+        name: prefix.name,
+        url: '',
+        path: prefix.fullPath,
+        type: 'folder' as const,
               parentFolder: folderPath.replace('files/', ''),
               category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
               createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
@@ -347,75 +352,82 @@ export default function FileManager() {
     }
   }, [searchQuery, allFiles, files]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files?.length || !isAdmin) return;
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) return;
     
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadSpeed(0);
-    setTimeRemaining(0);
-    lastUploadedBytes.current = 0;
-    lastUpdateTime.current = Date.now();
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
-    const file = event.target.files[0];
-    setTotalSize(file.size);
-    
-    // Sanitize the file name to prevent path traversal but preserve spaces
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
-    // Always ensure we're within the 'files/' directory
-    const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
-    const fileRef = ref(storage, filePath);
-
     try {
-      const uploadTask: UploadTask = uploadBytesResumable(fileRef, file);
-      uploadTask.on('state_changed',
-        (snapshot: UploadTaskSnapshot) => {
-          const now = Date.now();
-          const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
-          const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
+      setUploading(true);
+      const uploadPromises = Array.from(files).map(async (file) => {
+        try {
+          // Sanitize the filename to prevent path traversal but preserve spaces
+          const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
           
-          // Calculate upload speed (bytes per second)
-          const speed = bytesDiff / timeDiff;
-          setUploadSpeed(speed);
+          // Always ensure we're within the 'files/' directory
+          const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
+          const fileRef = ref(storage, filePath);
           
-          // Calculate time remaining
-          const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
-          const remainingTime = remainingBytes / speed;
-          setTimeRemaining(remainingTime);
+          // Get the current folder's category
+          let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
+          if (currentFolder) {
+            const placeholderRef = ref(storage, `files/${currentFolder}/.placeholder`);
+            try {
+              const metadata = await getMetadata(placeholderRef);
+              folderCategory = (metadata.customMetadata?.category as 'includes_coo' | 'without_coo') || 'includes_coo';
+            } catch (error) {
+              console.error('Error getting folder category:', error);
+            }
+          }
           
-          // Update progress
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
+          // Upload the file with the folder's category
+          await uploadBytesResumable(fileRef, file, {
+            customMetadata: {
+              category: folderCategory
+            }
+          });
           
-          // Update last values
-          lastUploadedBytes.current = snapshot.bytesTransferred;
-          lastUpdateTime.current = now;
-        },
-        (error: Error) => {
+          const url = await getDownloadURL(fileRef);
+          const metadata = await getMetadata(fileRef);
+          
+          const newFile: FileItem = {
+            name: file.name,
+            url,
+            path: filePath,
+            type: 'file',
+            parentFolder: currentFolder || 'root',
+            size: file.size,
+            lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+            category: folderCategory
+          };
+          return newFile;
+        } catch (error) {
           console.error('Error uploading file:', error);
-          toast.error('Failed to upload file');
-        },
-        async () => {
-          toast.success('File uploaded successfully');
-          setUploadProgress(0);
-          setUploadSpeed(0);
-          setTimeRemaining(0);
-          setTotalSize(0);
-          loadFiles();
-          
-          // Dispatch event to notify StorageDashboard
-          window.dispatchEvent(new Event('fileUploaded'));
+          toast.error(`Failed to upload ${file.name}`);
+          return null;
         }
-      );
+      });
+      
+      const uploadedFiles = await Promise.all(uploadPromises);
+      const successfulUploads = uploadedFiles.filter((file): file is FileItem => file !== null);
+      
+      if (successfulUploads.length > 0) {
+        setFiles(prevFiles => [...prevFiles, ...successfulUploads]);
+        toast.success(`Successfully uploaded ${successfulUploads.length} file(s)`);
+        
+        // Dispatch event to notify StorageDashboard
+        window.dispatchEvent(new Event('filesUploaded'));
+      }
     } catch (error) {
-      console.error('Error uploading file:', error);
-      toast.error('Failed to upload file');
-      setUploadProgress(0);
-      setUploadSpeed(0);
-      setTimeRemaining(0);
-      setTotalSize(0);
+      console.error('Error during upload:', error);
+      toast.error('Failed to upload files');
     } finally {
       setUploading(false);
+      // Reset the file input
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -442,35 +454,26 @@ export default function FileManager() {
     }
   };
 
-  const handleFileClick = async (item: FileItem) => {
-    if (item.type === 'folder') {
-      setCurrentFolder(item.path.replace('files/', ''));
-      return;
-    }
-    
-    try {
-      // Record file access
-      await fetch('/api/file-access-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filePath: item.path }),
-      });
-      
-      // Set the selected file for preview
-      setSelectedFile(item);
-      
-      // For text files, fetch the content
-      const fileExtension = item.name.split('.').pop()?.toLowerCase();
-      if (['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '')) {
-        const response = await fetch(item.url);
-        const text = await response.text();
-        setTextContent(text);
+  const handleFileClick = async (file: FileItem) => {
+    if (file.type === 'folder') {
+      handleFolderClick(file);
+    } else {
+      try {
+        // Record file access
+        await fetch('/api/file-access-history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ filePath: file.path }),
+        });
+
+        // Set the file for preview
+        setPreviewFile(file);
+      } catch (error) {
+        console.error('Error accessing file:', error);
+        toast.error('Failed to access file');
       }
-    } catch (error) {
-      console.error('Error handling file click:', error);
-      toast.error('Failed to open file');
     }
   };
 
@@ -677,234 +680,107 @@ export default function FileManager() {
   };
 
   const renderPreview = () => {
-    if (!selectedFile) return null;
+    if (!previewFile) return null;
 
-    const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
-    
-    // For PDFs, use a special viewer that prevents downloading
-    if (fileExtension === 'pdf') {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 relative">
-              <iframe
-                src={`${selectedFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}`}
-                className="w-full h-full"
-                title={selectedFile.name}
-                onContextMenu={(e) => !isAdmin && e.preventDefault()}
-              />
-              {!isAdmin && (
-                <div 
-                  className="absolute inset-0 pointer-events-none"
-                  onContextMenu={(e) => e.preventDefault()}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-    
-    // For images, show them directly
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '')) {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto">
-              <img 
-                src={selectedFile.url} 
-                alt={selectedFile.name} 
-                className="max-w-full max-h-[60vh] mx-auto"
-                onContextMenu={(e) => !isAdmin && e.preventDefault()}
-              />
-            </div>
-            {isAdmin && (
-              <div className="mt-4 flex justify-end">
-                <a 
-                  href={selectedFile.url} 
-                  download={selectedFile.name}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Download
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    // For videos, use a video player
-    if (['mp4', 'webm', 'ogg'].includes(fileExtension || '')) {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto">
-              <video 
-                controls 
-                className="max-w-full max-h-[60vh] mx-auto"
-                onContextMenu={(e) => !isAdmin && e.preventDefault()}
-              >
-                <source src={selectedFile.url} type={`video/${fileExtension}`} />
-                Your browser does not support the video tag.
-              </video>
-            </div>
-            {isAdmin && (
-              <div className="mt-4 flex justify-end">
-                <a 
-                  href={selectedFile.url} 
-                  download={selectedFile.name}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Download
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    // For audio files
-    if (['mp3', 'wav', 'ogg', 'aac'].includes(fileExtension || '')) {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl w-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 flex items-center justify-center p-4">
-              <audio 
-                controls 
-                className="w-full"
-                onContextMenu={(e) => !isAdmin && e.preventDefault()}
-              >
-                <source src={selectedFile.url} type={`audio/${fileExtension}`} />
-                Your browser does not support the audio element.
-              </audio>
-            </div>
-            {isAdmin && (
-              <div className="mt-4 flex justify-end">
-                <a 
-                  href={selectedFile.url} 
-                  download={selectedFile.name}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Download
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    // For text files
-    if (['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '')) {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto bg-gray-50 p-4 rounded">
-              <pre className="whitespace-pre-wrap text-sm text-black">
-                {textContent}
-              </pre>
-            </div>
-            {isAdmin && (
-              <div className="mt-4 flex justify-end">
-                <a 
-                  href={selectedFile.url} 
-                  download={selectedFile.name}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Download
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    // For other file types, show a generic preview with download option for admins only
+    const fileType = getFileType(previewFile.name);
+    const isImage = fileType.startsWith('image/');
+    const isPDF = fileType === 'application/pdf';
+    const isText = fileType === 'text/plain';
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
-            <button 
-              onClick={() => setSelectedFile(null)}
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className="flex justify-between items-center p-4 border-b">
+            <h3 className="text-lg font-semibold text-black">{previewFile.name}</h3>
+            <div className="flex items-center gap-2">
+              {isAdmin && isText && (
+            <button
+                  onClick={() => setIsEditingContent(!isEditingContent)}
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  {isEditingContent ? 'Preview' : 'Edit'}
+                </button>
+              )}
+            <button
+                onClick={() => {
+                  setPreviewFile(null);
+                  setIsEditingContent(false);
+                  setEditingContent('');
+                }}
               className="text-gray-500 hover:text-gray-700"
             >
-              <FiX className="w-5 h-5" />
+              <FiX size={24} />
             </button>
-          </div>
-          <div className="flex flex-col items-center justify-center p-6">
-            <div className="w-16 h-16 mb-4 flex items-center justify-center text-blue-500">
-              {getFileIcon(selectedFile.name)}
             </div>
-            <p className="text-gray-600 mb-4 text-center">
-              This file type cannot be previewed directly.
-            </p>
-            {isAdmin && (
-              <a 
-                href={selectedFile.url} 
-                download={selectedFile.name}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Download File
-              </a>
+          </div>
+          <div className="p-4 h-[calc(90vh-4rem)] overflow-auto">
+            {isEditingContent ? (
+              <div className="h-full flex flex-col">
+                <textarea
+                  value={editingContent}
+                  onChange={(e) => setEditingContent(e.target.value)}
+                  className="flex-1 w-full p-2 border rounded font-mono text-sm text-black"
+                />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={handleSaveContent}
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+            {isImage && (
+              <Image
+                src={previewFile.url}
+                alt={previewFile.name}
+                width={800}
+                height={600}
+              />
             )}
-            {!isAdmin && (
-              <p className="text-sm text-gray-500">
-                Contact an administrator to download this file.
-              </p>
+            {isPDF && (
+              <div className="relative w-full h-full">
+              <iframe
+                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}&scrollbar=1`}
+                className="w-full h-full"
+                title={previewFile.name}
+                  onContextMenu={(e) => !isAdmin && e.preventDefault()}
+                />
+                {!isAdmin && (
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                )}
+                {!isAdmin && (
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full" 
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{ pointerEvents: 'auto' }}
+                  />
+                )}
+              </div>
+            )}
+            {isText && (
+              <pre className="whitespace-pre-wrap font-mono text-sm text-black">
+                {previewFile.url}
+              </pre>
+            )}
+            {!isImage && !isPDF && !isText && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Preview not available for this file type</p>
+                <a
+                  href={previewFile.url}
+                  download
+                  className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                  Download to View
+                </a>
+              </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1076,15 +952,15 @@ export default function FileManager() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-black">Files</h1>
-            {currentFolder && (
-              <button
-                onClick={navigateUp}
-                className="text-blue-500 hover:text-blue-600"
-              >
+              {currentFolder && (
+                <button
+                  onClick={navigateUp}
+                  className="text-blue-500 hover:text-blue-600"
+                >
                 Back
-              </button>
-            )}
-          </div>
+                </button>
+              )}
+            </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <div className="flex items-center gap-2">
@@ -1098,16 +974,16 @@ export default function FileManager() {
               <option value="without_coo">Without C of O</option>
             </select>
           </div>
-          <button
+                  <button
             onClick={handleRefresh}
             className={`p-2 rounded ${isRefreshing ? 'bg-blue-100 text-blue-600 animate-spin' : 'text-gray-500 hover:text-gray-700'}`}
             disabled={isRefreshing}
             title="Refresh files"
           >
             <FiRefreshCw className="w-5 h-5" />
-          </button>
+                  </button>
           <div className="flex items-center gap-2">
-            <button
+              <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded ${
                 viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
@@ -1122,8 +998,8 @@ export default function FileManager() {
               }`}
             >
               <FiList className="w-5 h-5" />
-            </button>
-          </div>
+              </button>
+            </div>
           {isAdmin && (
             <div className="flex items-center gap-2 ml-auto">
               <button
@@ -1144,30 +1020,30 @@ export default function FileManager() {
                   disabled={uploading}
                 />
               </label>
-            </div>
+          </div>
           )}
         </div>
         <div className="relative mb-4">
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files and folders..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-          />
+            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search files and folders..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+            />
           {isSearching && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-            </div>
+          </div>
           )}
         </div>
         {searchQuery && (
           <div className="mt-2 text-sm text-gray-500">
             Searching all folders for "{searchQuery}"...
-          </div>
-        )}
-        <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
+            </div>
+          )}
+          <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
           {filteredItems.length > 0 ? (
             filteredItems.map((item) => (
               <div
@@ -1197,15 +1073,15 @@ export default function FileManager() {
                           className="px-2 py-1 border rounded text-black"
                           onClick={(e) => e.stopPropagation()}
                         />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                             handleRename(item, newName);
-                          }}
+                        }}
                           className="text-green-500 hover:text-green-600"
-                        >
+                      >
                           <FiSave className="w-4 h-4" />
-                        </button>
+                      </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1216,8 +1092,8 @@ export default function FileManager() {
                         >
                           <FiX className="w-4 h-4" />
                         </button>
-                      </div>
-                    ) : (
+                    </div>
+                  ) : (
                       <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
                         {item.name}
                       </div>
@@ -1251,11 +1127,11 @@ export default function FileManager() {
                     )}
                   </div>
                 </div>
-                {isAdmin && (
+                        {isAdmin && (
                   <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                         setEditingItem(item);
                         setNewName(item.name);
                       }}
@@ -1269,26 +1145,26 @@ export default function FileManager() {
                         if (item.type === 'folder') {
                           handleDeleteFolder(item.path);
                         } else {
-                          handleDelete(item.path);
+                              handleDelete(item.path);
                         }
-                      }}
+                            }}
                       className="text-red-500 hover:text-red-700"
-                    >
+                          >
                       <FiTrash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+                          </button>
+                      </div>
+                  )}
+                </div>
             ))
           ) : (
-            <p className="text-center text-gray-500 py-4 col-span-full">
-              {searchQuery ? 'No matching files and folders found' : 'No files and folders'}
-            </p>
-          )}
+              <p className="text-center text-gray-500 py-4 col-span-full">
+                {searchQuery ? 'No matching files and folders found' : 'No files and folders'}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
       {renderPreview()}
-      
+
       {/* New Folder Modal */}
       {showNewFolderInput && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1304,7 +1180,7 @@ export default function FileManager() {
               >
                 <FiX className="w-5 h-5" />
               </button>
-            </div>
+          </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Folder Name</label>
               <input
@@ -1315,7 +1191,7 @@ export default function FileManager() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
                 autoFocus
               />
-            </div>
+          </div>
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
