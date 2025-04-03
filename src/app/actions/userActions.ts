@@ -1,7 +1,7 @@
 'use server';
 
-import { initAdmin } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
+import { getAdminAuth } from '@/lib/firebase-admin-server';
 
 export async function deleteUser(userId: string) {
   try {
@@ -12,7 +12,7 @@ export async function deleteUser(userId: string) {
       throw new Error('No session cookie found');
     }
 
-    const auth = await initAdmin();
+    const auth = getAdminAuth();
     
     // Verify the session cookie and get the user
     const decodedClaims = await auth.verifySessionCookie(sessionCookie);
@@ -37,7 +37,7 @@ export async function deleteUser(userId: string) {
 
 export async function signup(email: string, password: string, username: string) {
   try {
-    const auth = await initAdmin();
+    const auth = getAdminAuth();
     
     // Create the user in Firebase Auth
     const userRecord = await auth.createUser({
@@ -69,7 +69,7 @@ export async function updateUser(userId: string, displayName: string) {
       throw new Error('No session cookie found');
     }
 
-    const auth = await initAdmin();
+    const auth = getAdminAuth();
     
     // Verify the session cookie and get the user
     const decodedClaims = await auth.verifySessionCookie(sessionCookie);
@@ -91,5 +91,29 @@ export async function updateUser(userId: string, displayName: string) {
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to update user' 
     };
+  }
+}
+
+export async function getCurrentUser() {
+  try {
+    const cookieStore = cookies();
+    const sessionCookie = cookieStore.get('session')?.value;
+    
+    if (!sessionCookie) {
+      return null;
+    }
+    
+    const auth = getAdminAuth();
+    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
+    
+    return {
+      uid: decodedClaims.uid,
+      email: decodedClaims.email,
+      role: decodedClaims.email?.includes('admin') ? 'admin' : 'viewer',
+      displayName: decodedClaims.displayName || ''
+    };
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
   }
 } 

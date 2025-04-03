@@ -7,11 +7,16 @@ const firebaseAdminConfig: ServiceAccount = {
   privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
 };
 
-export function initAdmin() {
-  if (getApps().length === 0) {
-    initializeApp({
-      credential: cert(firebaseAdminConfig),
-    });
+let adminApp: ReturnType<typeof getAuth> | null = null;
+
+export function getAdminAuth() {
+  if (!adminApp) {
+    if (getApps().length === 0) {
+      initializeApp({
+        credential: cert(firebaseAdminConfig),
+      });
+    }
+    adminApp = getAuth();
   }
-  return getAuth();
+  return adminApp;
 } 

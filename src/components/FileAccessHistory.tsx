@@ -34,7 +34,7 @@ export default function FileAccessHistory() {
   const fetchAccessHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/file-access?page=${pagination.page}&limit=${pagination.limit}`);
+      const response = await fetch(`/api/file-access-history?page=${pagination.page}&limit=${pagination.limit}`);
       if (!response.ok) {
         throw new Error('Failed to fetch access history');
       }
@@ -47,7 +47,9 @@ export default function FileAccessHistory() {
         totalPages: data.totalPages
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
+      toast.error('Failed to fetch access history');
     } finally {
       setLoading(false);
     }

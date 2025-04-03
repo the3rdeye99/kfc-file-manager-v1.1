@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { initAdmin } from '@/lib/firebase-admin';
+import { getAdminAuth } from '@/lib/firebase-admin-server';
+import { cookies } from 'next/headers';
+import { getFirestore } from 'firebase-admin/firestore';
 
 export async function POST(request: Request) {
   try {
@@ -7,7 +9,7 @@ export async function POST(request: Request) {
     
     // Create a session cookie
     const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
-    const sessionCookie = await initAdmin().createSessionCookie(idToken, { expiresIn });
+    const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
     
     // Set the cookie
     const response = NextResponse.json({ status: 'success' });

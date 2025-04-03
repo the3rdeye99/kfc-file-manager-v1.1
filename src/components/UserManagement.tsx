@@ -8,7 +8,7 @@ import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff } from 're
 import { deleteUser, updateUser } from '@/app/actions/userActions';
 
 interface User {
-  id: string;
+  uid: string;
   email: string;
   role: 'admin' | 'viewer';
   displayName: string;
@@ -37,7 +37,7 @@ export default function UserManagement() {
         throw new Error('Failed to fetch users');
       }
       const data = await response.json();
-      setUsers(data.users);
+      setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
       toast.error('Failed to load users');
@@ -54,7 +54,7 @@ export default function UserManagement() {
 
   const handleDeleteUser = async (userId: string) => {
     // Find the user to be deleted
-    const userToDelete = users.find(user => user.id === userId);
+    const userToDelete = users.find(user => user.uid === userId);
     
     // Check if the user is an admin
     if (userToDelete?.role === 'admin') {
@@ -70,7 +70,7 @@ export default function UserManagement() {
       const result = await deleteUser(userId);
       
       if (result.success) {
-        setUsers(users.filter(user => user.id !== userId));
+        setUsers(users.filter(user => user.uid !== userId));
         toast.success('User deleted successfully');
       } else {
         toast.error(result.error || 'Failed to delete user');
@@ -93,11 +93,11 @@ export default function UserManagement() {
     }
 
     try {
-      const result = await updateUser(editingUser.id, newName);
+      const result = await updateUser(editingUser.uid, newName);
       
       if (result.success) {
         setUsers(users.map(user => 
-          user.id === editingUser.id 
+          user.uid === editingUser.uid 
             ? { ...user, displayName: newName }
             : user
         ));
@@ -134,7 +134,7 @@ export default function UserManagement() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: selectedUser.id,
+          userId: selectedUser.uid,
           newPassword: newPassword,
         }),
       });
@@ -180,7 +180,7 @@ export default function UserManagement() {
           <div className="border-t border-gray-200">
             <ul className="divide-y divide-gray-200">
               {users.map((user) => (
-                <li key={user.id} className="px-4 py-4 sm:px-6">
+                <li key={user.uid} className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
@@ -195,7 +195,7 @@ export default function UserManagement() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {user.email !== 'admin@example.com' && (
+                      {user.email !== 'admin@kayodefilani.com' && (
                         <>
                           <button
                             onClick={() => handleEditUser(user)}
@@ -217,7 +217,7 @@ export default function UserManagement() {
                                 Change Password
                               </button>
                               <button
-                                onClick={() => handleDeleteUser(user.id)}
+                                onClick={() => handleDeleteUser(user.uid)}
                                 className="text-red-600 hover:text-red-700 flex items-center gap-1"
                               >
                                 <FiTrash2 />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata } from 'firebase/storage';
+import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -88,6 +88,14 @@ const getFileIcon = (fileName: string) => {
   }
 };
 
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout;
+  return (...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
+
 export default function FileManager() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -118,58 +126,99 @@ export default function FileManager() {
 
   const loadFiles = useCallback(async () => {
     try {
-      // If user is not logged in, don't try to load files
-      if (!user) {
-        setFiles([]);
-        return;
-      }
-
+      if (isRefreshing) return;
+      
       setIsRefreshing(true);
-      // Always ensure we're within the 'files/' directory
-      const folderPath = currentFolder ? `files/${currentFolder}` : 'files';
-      const folderRef = ref(storage, folderPath);
+      const currentPath = currentFolder === 'root' ? 'files' : `files/${currentFolder}`;
+      const folderRef = ref(storage, currentPath);
+      
+      // List all files and folders
       const result = await listAll(folderRef);
       
+      // Process files
       const filePromises = result.items.map(async (item) => {
-        const url = await getDownloadURL(item);
-        const metadata = await getMetadata(item);
-        return {
-          name: item.name,
-          url,
-          path: item.fullPath,
-          type: 'file' as const,
-          parentFolder: currentFolder,
-          size: metadata.size,
-          lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-          category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
-        };
+        try {
+          const url = await getDownloadURL(item);
+          const metadata = await getMetadata(item);
+          const fileItem: FileItem = {
+            name: item.name,
+            path: item.fullPath,
+            url,
+            type: 'file',
+            size: metadata.size,
+            parentFolder: currentFolder,
+            lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+            category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+          };
+          return fileItem;
+        } catch (error) {
+          console.error('Error processing file:', error);
+          return null;
+        }
       });
-
-      const folderItems = result.prefixes.map(async (prefix) => {
-        const metadata = await getMetadata(ref(storage, `${prefix.fullPath}/.placeholder`));
-        return {
-        name: prefix.name,
-        url: '',
-        path: prefix.fullPath,
-        type: 'folder' as const,
-          parentFolder: currentFolder,
-          category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
-        };
+      
+      // Process folders (items ending with .placeholder)
+      const folderPromises = result.prefixes.map(async (prefix) => {
+        try {
+          // Check if this is a real folder by looking for .placeholder
+          const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
+          try {
+            const metadata = await getMetadata(placeholderRef);
+            const folderItem: FileItem = {
+              name: prefix.name,
+              path: prefix.fullPath,
+              url: '',
+              type: 'folder',
+              parentFolder: currentFolder,
+              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+            };
+            return folderItem;
+          } catch (error) {
+            // If .placeholder doesn't exist, this might be a file with a path separator
+            return null;
+          }
+        } catch (error) {
+          console.error('Error processing folder:', error);
+          return null;
+        }
       });
-
-      const files = await Promise.all(filePromises);
-      const folders = await Promise.all(folderItems);
-      setFiles([...folders, ...files]);
+      
+      // Wait for all promises to resolve
+      const [files, folders] = await Promise.all([
+        Promise.all(filePromises),
+        Promise.all(folderPromises)
+      ]);
+      
+      // Filter out null values and sort
+      const validFiles = files.filter((file): file is FileItem => file !== null && file.type === 'file');
+      const validFolders = folders.filter((folder): folder is FileItem => folder !== null && folder.type === 'folder');
+      
+      // Sort items: folders first, then files, both alphabetically
+      const sortedFolders = validFolders.sort((a, b) => a.name.localeCompare(b.name));
+      const sortedFiles = validFiles.sort((a, b) => a.name.localeCompare(b.name));
+      
+      setFiles([...sortedFolders, ...sortedFiles]);
     } catch (error) {
       console.error('Error loading files:', error);
-      if (user) {
-        toast.error('Failed to load files');
-      }
-      setFiles([]);
+      toast.error('Failed to load files');
     } finally {
       setIsRefreshing(false);
     }
-  }, [currentFolder, user]);
+  }, [currentFolder]);
+
+  const debouncedLoadFiles = useCallback(
+    debounce(() => {
+      loadFiles();
+    }, 500),
+    [loadFiles]
+  );
+
+  useEffect(() => {
+    debouncedLoadFiles();
+    return () => {
+      debounce(() => {}, 0)();
+    };
+  }, [debouncedLoadFiles]);
 
   // Load all files for global search
   const loadAllFiles = useCallback(async () => {
@@ -185,24 +234,24 @@ export default function FileManager() {
         }
         
         const folderRef = ref(storage, folderPath);
-        const result = await listAll(folderRef);
-        
+      const result = await listAll(folderRef);
+      
         // Process files in current folder
-        const filePromises = result.items.map(async (item) => {
-          const url = await getDownloadURL(item);
+      const filePromises = result.items.map(async (item) => {
+        const url = await getDownloadURL(item);
           const metadata = await getMetadata(item);
-          return {
-            name: item.name,
-            url,
-            path: item.fullPath,
-            type: 'file' as const,
+        return {
+          name: item.name,
+          url,
+          path: item.fullPath,
+          type: 'file' as const,
             parentFolder: folderPath.replace('files/', ''),
             size: metadata.size,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
             category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
-          };
-        });
-        
+        };
+      });
+
         const files = await Promise.all(filePromises);
         allItems.push(...files);
         
@@ -220,10 +269,10 @@ export default function FileManager() {
             }
             
             const folderItem = {
-              name: prefix.name,
-              url: '',
-              path: prefix.fullPath,
-              type: 'folder' as const,
+        name: prefix.name,
+        url: '',
+        path: prefix.fullPath,
+        type: 'folder' as const,
               parentFolder: folderPath.replace('files/', ''),
               category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
             };
@@ -249,16 +298,6 @@ export default function FileManager() {
       setIsSearching(false);
     }
   }, []);
-
-  // Load files when component mounts and when currentFolder changes
-  useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
-
-  // Load all files for search when component mounts
-  useEffect(() => {
-    loadAllFiles();
-  }, [loadAllFiles]);
 
   // Handle search
   useEffect(() => {
@@ -315,8 +354,8 @@ export default function FileManager() {
     const file = event.target.files[0];
     setTotalSize(file.size);
     
-    // Sanitize the file name to prevent path traversal
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    // Sanitize the file name to prevent path traversal but preserve spaces
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
     // Always ensure we're within the 'files/' directory
     const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
     const fileRef = ref(storage, filePath);
@@ -357,6 +396,9 @@ export default function FileManager() {
           setTimeRemaining(0);
           setTotalSize(0);
           loadFiles();
+          
+          // Dispatch event to notify StorageDashboard
+          window.dispatchEvent(new Event('fileUploaded'));
         }
       );
     } catch (error) {
@@ -385,6 +427,9 @@ export default function FileManager() {
       await deleteObject(fileRef);
       toast.success('File deleted successfully');
       loadFiles();
+      
+      // Dispatch event to notify StorageDashboard
+      window.dispatchEvent(new Event('fileDeleted'));
     } catch (error) {
       console.error('Error deleting file:', error);
       toast.error('Failed to delete file');
@@ -397,7 +442,7 @@ export default function FileManager() {
     } else {
       try {
         // Record file access
-        await fetch('/api/file-access', {
+        await fetch('/api/file-access-history', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -438,6 +483,24 @@ export default function FileManager() {
     if (!isAdmin) return;
     
     try {
+      // Validate the new name
+      if (!newName || newName.trim() === '') {
+        toast.error('Please enter a valid name');
+        return;
+      }
+      
+      // Check if a file with the same name already exists
+      const existingFile = files.find(file => 
+        file.name === newName && 
+        file.parentFolder === item.parentFolder && 
+        file.path !== item.path
+      );
+      
+      if (existingFile) {
+        toast.error('A file with this name already exists in this folder');
+        return;
+      }
+      
       if (item.type === 'folder') {
         // For folders, we need to rename the placeholder file
         const oldPlaceholderPath = `${item.path}/.placeholder`;
@@ -447,27 +510,34 @@ export default function FileManager() {
         const safeOldPath = oldPlaceholderPath.startsWith('files/') ? oldPlaceholderPath : `files/${oldPlaceholderPath}`;
         const safeNewPath = newPlaceholderPath.startsWith('files/') ? newPlaceholderPath : `files/${newPlaceholderPath}`;
         
-        // Create new placeholder
-        const newPlaceholderRef = ref(storage, safeNewPath);
-        await uploadBytesResumable(newPlaceholderRef, new Uint8Array(0));
+        // Create new folder structure first
+        const newFolderPath = `${item.parentFolder}/${newName}`;
+        const safeNewFolderPath = newFolderPath.startsWith('files/') ? newFolderPath : `files/${newFolderPath}`;
+        const newFolderRef = ref(storage, safeNewFolderPath);
         
-        // Delete old placeholder
-        const oldPlaceholderRef = ref(storage, safeOldPath);
-        await deleteObject(oldPlaceholderRef);
+        // Create a temporary placeholder in the new folder
+        await uploadBytesResumable(ref(storage, `${safeNewFolderPath}/.temp`), new Uint8Array(0));
         
-        // Move all contents to new folder
-        const folderRef = ref(storage, safeOldPath.replace('/.placeholder', ''));
-        const result = await listAll(folderRef);
+        // List contents of the old folder
+        const oldFolderRef = ref(storage, item.path);
+        const result = await listAll(oldFolderRef);
         
         // Move all files
         const movePromises = result.items.map(async (file) => {
-          const newPath = file.fullPath.replace(item.path, `${item.parentFolder}/${newName}`);
-          const safeNewPath = newPath.startsWith('files/') ? newPath : `files/${newPath}`;
-          const newRef = ref(storage, safeNewPath);
-          const url = await getDownloadURL(file);
-          const response = await fetch(url);
-          const blob = await response.blob();
-          await uploadBytesResumable(newRef, blob);
+          const newPath = file.fullPath.replace(item.path, safeNewFolderPath);
+          const newRef = ref(storage, newPath);
+          
+          // Get the file content and metadata directly from Firebase Storage
+          const fileRef = ref(storage, file.fullPath);
+          const metadata = await getMetadata(fileRef);
+          
+          // Create a new file with the same content and metadata
+          const emptyBlob = new Blob([], { type: 'application/octet-stream' });
+          await uploadBytesResumable(newRef, emptyBlob, {
+            customMetadata: metadata.customMetadata
+          });
+          
+          // Delete the old file
           await deleteObject(file);
         });
         
@@ -480,13 +550,25 @@ export default function FileManager() {
               ...prefix,
               type: 'folder',
               url: '',
-              parentFolder: item.parentFolder,
+              parentFolder: safeNewFolderPath,
               path: prefix.fullPath
             },
             prefix.name
           )
         );
         await Promise.all(moveFolderPromises);
+        
+        // Create the final placeholder in the new folder
+        await uploadBytesResumable(ref(storage, safeNewPath), new Uint8Array(0));
+        
+        // Clean up old folder
+        try {
+          const oldPlaceholderRef = ref(storage, safeOldPath);
+          await deleteObject(oldPlaceholderRef);
+          await deleteObject(ref(storage, `${safeOldPath}/.temp`));
+        } catch (error) {
+          console.log('Error cleaning up old folder:', error);
+        }
       } else {
         // For files, we can simply rename them
         const newPath = `${item.parentFolder}/${newName}`;
@@ -494,18 +576,51 @@ export default function FileManager() {
         const safeNewPath = newPath.startsWith('files/') ? newPath : `files/${newPath}`;
         const safeOldPath = item.path.startsWith('files/') ? item.path : `files/${item.path}`;
         
+        // Get the file metadata
+        const oldRef = ref(storage, safeOldPath);
+        const metadata = await getMetadata(oldRef);
+        
+        // Create a new reference with the new path
         const newRef = ref(storage, safeNewPath);
-        const url = await getDownloadURL(ref(storage, safeOldPath));
-        const response = await fetch(url);
-        const blob = await response.blob();
-        await uploadBytesResumable(newRef, blob);
-        await deleteObject(ref(storage, safeOldPath));
+        
+        // Create a new file with the same metadata
+        const emptyBlob = new Blob([], { type: 'application/octet-stream' });
+        await uploadBytesResumable(newRef, emptyBlob, {
+          customMetadata: metadata.customMetadata
+        });
+        
+        // Delete the old file
+        await deleteObject(oldRef);
       }
+      
+      // Update the UI immediately
+      setFiles(prevFiles => {
+        return prevFiles.map(file => {
+          if (file.path === item.path) {
+            return {
+              ...file,
+              name: newName,
+              path: item.type === 'folder' 
+                ? `${item.parentFolder}/${newName}`
+                : `${item.parentFolder}/${newName}`
+            };
+          }
+          return file;
+        });
+      });
       
       toast.success('Item renamed successfully');
       setEditingItem(null);
       setNewName('');
-      loadFiles();
+      
+      // Refresh the file list to ensure everything is in sync
+      await loadFiles();
+      
+      // Also refresh the allFiles list for search
+      await loadAllFiles();
+      
+      // Dispatch event to notify StorageDashboard
+      window.dispatchEvent(new Event('fileRenamed'));
     } catch (error) {
       console.error('Error renaming item:', error);
       toast.error('Failed to rename item');
@@ -561,7 +676,7 @@ export default function FileManager() {
             <h3 className="text-lg font-semibold text-black">{previewFile.name}</h3>
             <div className="flex items-center gap-2">
               {isAdmin && isText && (
-                <button
+            <button
                   onClick={() => setIsEditingContent(!isEditingContent)}
                   className="text-blue-500 hover:text-blue-600"
                 >
@@ -608,11 +723,27 @@ export default function FileManager() {
               />
             )}
             {isPDF && (
-              <iframe
-                src={previewFile.url}
-                className="w-full h-full"
-                title={previewFile.name}
-              />
+              <div className="relative w-full h-full">
+                <iframe
+                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}&scrollbar=1`}
+                  className="w-full h-full"
+                  title={previewFile.name}
+                  onContextMenu={(e) => !isAdmin && e.preventDefault()}
+                />
+                {!isAdmin && (
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                )}
+                {!isAdmin && (
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full" 
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{ pointerEvents: 'auto' }}
+                  />
+                )}
+              </div>
             )}
             {isText && (
               <pre className="whitespace-pre-wrap font-mono text-sm text-black">
@@ -654,7 +785,7 @@ export default function FileManager() {
       
       const parentPath = currentFolder.split('/').slice(0, -1).join('/');
       // Record folder access
-      await fetch('/api/file-access', {
+      await fetch('/api/file-access-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -675,29 +806,29 @@ export default function FileManager() {
   });
 
   const createFolder = async () => {
-    if (!newFolderName.trim()) {
-      toast.error('Please enter a folder name');
-      return;
-    }
-
-    // Always ensure we're within the 'files/' directory
-    const folderPath = currentFolder 
-      ? `files/${currentFolder}/${newFolderName}/.placeholder`
-      : `files/${newFolderName}/.placeholder`;
-
+    if (!isAdmin || !newFolderName.trim()) return;
+    
     try {
+      // Sanitize the folder name to prevent path traversal but preserve spaces
+      const sanitizedFolderName = newFolderName.replace(/[^a-zA-Z0-9 .-]/g, '_');
+      // Always ensure we're within the 'files/' directory
+      const folderPath = currentFolder ? `files/${currentFolder}/${sanitizedFolderName}` : `files/${sanitizedFolderName}`;
+      
+      // Create a placeholder file to represent the folder
+      const placeholderPath = `${folderPath}/.placeholder`;
+      const placeholderRef = ref(storage, placeholderPath);
+      
       // Create an empty file to represent the folder
-      const placeholderRef = ref(storage, folderPath);
-      const metadata = {
-        customMetadata: {
-          category: newFolderCategory
-        }
-      };
-      await uploadBytesResumable(placeholderRef, new Uint8Array(0), metadata);
+      const emptyBlob = new Blob([''], { type: 'text/plain' });
+      await uploadBytesResumable(placeholderRef, emptyBlob);
+      
       toast.success('Folder created successfully');
       setNewFolderName('');
       setShowNewFolderInput(false);
       loadFiles();
+      
+      // Dispatch event to notify StorageDashboard
+      window.dispatchEvent(new Event('folderCreated'));
     } catch (error) {
       console.error('Error creating folder:', error);
       toast.error('Failed to create folder');
@@ -738,6 +869,9 @@ export default function FileManager() {
       
       toast.success('Folder deleted successfully');
       loadFiles();
+      
+      // Dispatch event to notify StorageDashboard
+      window.dispatchEvent(new Event('folderDeleted'));
     } catch (error) {
       console.error('Error deleting folder:', error);
       toast.error('Failed to delete folder');
@@ -747,7 +881,7 @@ export default function FileManager() {
   const handleFolderClick = async (folder: FileItem) => {
     try {
       // Record folder access
-      await fetch('/api/file-access', {
+      await fetch('/api/file-access-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -856,12 +990,12 @@ export default function FileManager() {
                   <label className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer">
                     <FiUpload className="w-5 h-5" />
                     Upload File
-                    <input
-                      type="file"
-                      className="hidden"
+                  <input
+                    type="file"
+                    className="hidden"
                       onChange={handleUpload}
-                      disabled={uploading}
-                    />
+                    disabled={uploading}
+                  />
                   </label>
                 </div>
               )}
@@ -879,7 +1013,7 @@ export default function FileManager() {
             {isSearching && (
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-              </div>
+          </div>
             )}
           </div>
           {searchQuery && (
@@ -951,27 +1085,27 @@ export default function FileManager() {
                             className="px-2 py-1 border rounded text-black"
                             onClick={(e) => e.stopPropagation()}
                           />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                               handleRename(item, newName);
-                            }}
+                        }}
                             className="text-green-500 hover:text-green-600"
-                          >
+                      >
                             <FiSave className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                      </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                               setEditingItem(null);
                               setNewName('');
-                            }}
+                          }}
                             className="text-red-500 hover:text-red-600"
-                          >
+                        >
                             <FiX className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
+                        </button>
+                    </div>
+                  ) : (
                         <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
                           {item.name}
                         </div>
@@ -991,11 +1125,11 @@ export default function FileManager() {
                       )}
                     </div>
                   </div>
-                  {isAdmin && (
+                        {isAdmin && (
                     <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                           setEditingItem(item);
                           setNewName(item.name);
                         }}
@@ -1009,14 +1143,14 @@ export default function FileManager() {
                           if (item.type === 'folder') {
                             handleDeleteFolder(item.path);
                           } else {
-                            handleDelete(item.path);
+                              handleDelete(item.path);
                           }
-                          }}
+                            }}
                         className="text-red-500 hover:text-red-700"
-                        >
+                          >
                         <FiTrash2 className="w-5 h-5" />
-                        </button>
-                    </div>
+                          </button>
+                      </div>
                   )}
                 </div>
               ))

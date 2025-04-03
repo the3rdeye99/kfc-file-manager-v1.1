@@ -1,24 +1,14 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/firebase-admin';
-import { getAuth } from 'firebase-admin/auth';
+import { getAdminAuth } from '@/lib/firebase-admin-server';
 
 export async function POST(request: Request) {
   try {
-    const { userId, newPassword } = await request.json();
-
-    if (!userId || !newPassword) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
-
-    // Update the user's password
-    await getAuth().updateUser(userId, {
-      password: newPassword,
-    });
-
-    return NextResponse.json({ success: true });
+    const { uid, newPassword } = await request.json();
+    
+    const auth = getAdminAuth();
+    await auth.updateUser(uid, { password: newPassword });
+    
+    return NextResponse.json({ status: 'success' });
   } catch (error) {
     console.error('Error changing password:', error);
     return NextResponse.json(

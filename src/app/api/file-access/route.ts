@@ -1,99 +1,64 @@
 import { NextResponse } from 'next/server';
-import { initAdmin } from '@/lib/firebase-admin';
-import { cookies } from 'next/headers';
+import { getAdminAuth } from '@/lib/firebase-admin-server';
 import { getFirestore } from 'firebase-admin/firestore';
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value;
+    const { searchParams } = new URL(request.url);
+    const filePath = searchParams.get('path');
     
-    if (!sessionCookie) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!filePath) {
+      return NextResponse.json(
+        { error: 'File path is required' },
+        { status: 400 }
+      );
     }
 
-    const auth = await initAdmin();
-    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
-    
-    const { filePath } = await request.json();
+    const auth = getAdminAuth();
     const db = getFirestore();
     
-    // Record the file access
-    await db.collection('fileAccess').add({
-      filePath,
-      userId: decodedClaims.uid,
-      userEmail: decodedClaims.email || '',
-      username: decodedClaims.username || decodedClaims.displayName || 'Unknown User',
-      timestamp: new Date(),
-    });
-
-    return NextResponse.json({ success: true });
+    // Get the file access settings from Firestore
+    const doc = await db.collection('fileAccess').doc(filePath).get();
+    
+    if (!doc.exists) {
+      return NextResponse.json({ access: 'public' });
+    }
+    
+    return NextResponse.json(doc.data());
   } catch (error) {
-    console.error('Error recording file access:', error);
+    console.error('Error getting file access:', error);
     return NextResponse.json(
-      { error: 'Failed to record file access' },
+      { error: 'Failed to get file access' },
       { status: 500 }
     );
   }
 }
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value;
+    const { filePath, access } = await request.json();
     
-    if (!sessionCookie) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!filePath || !access) {
+      return NextResponse.json(
+        { error: 'File path and access level are required' },
+        { status: 400 }
+      );
     }
 
-    const auth = await initAdmin();
-    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
-    
-    // Check if the user is an admin
-    if (!decodedClaims.email?.includes('admin')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get pagination parameters from URL
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '20');
-    
-    // Validate pagination parameters
-    const validPage = Math.max(1, page);
-    const validLimit = Math.min(100, Math.max(20, limit));
-    const offset = (validPage - 1) * validLimit;
-
+    const auth = getAdminAuth();
     const db = getFirestore();
     
-    // Get total count
-    const totalSnapshot = await db.collection('fileAccess').count().get();
-    const total = totalSnapshot.data().count;
-    
-    // Get paginated file access records
-    const snapshot = await db.collection('fileAccess')
-      .orderBy('timestamp', 'desc')
-      .limit(validLimit)
-      .offset(offset)
-      .get();
-
-    const accessHistory = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp.toDate().toISOString()
-    }));
-
-    return NextResponse.json({ 
-      accessHistory,
-      total,
-      page: validPage,
-      limit: validLimit,
-      totalPages: Math.ceil(total / validLimit)
+    // Update the file access settings in Firestore
+    await db.collection('fileAccess').doc(filePath).set({
+      access,
+      updatedAt: new Date().toISOString()
     });
+    
+    return NextResponse.json({ status: 'success' });
   } catch (error) {
-    console.error('Error fetching file access history:', error);
+    console.error('Error updating file access:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch file access history' },
+      { error: 'Failed to update file access' },
       { status: 500 }
     );
   }
