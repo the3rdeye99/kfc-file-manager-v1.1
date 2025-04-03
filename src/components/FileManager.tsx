@@ -5,7 +5,7 @@ import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, Uploa
 import { storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload } from 'react-icons/fi';
+import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave } from 'react-icons/fi';
 import Image from 'next/image';
 
 interface FileItem {
@@ -123,6 +123,8 @@ export default function FileManager() {
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'includes_coo' | 'without_coo'>('all');
   const [newFolderCategory, setNewFolderCategory] = useState<'includes_coo' | 'without_coo'>('includes_coo');
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [textContent, setTextContent] = useState('');
 
   const loadFiles = useCallback(async () => {
     try {
@@ -440,26 +442,35 @@ export default function FileManager() {
     }
   };
 
-  const handleFileClick = async (file: FileItem) => {
-    if (file.type === 'folder') {
-      handleFolderClick(file);
-    } else {
-      try {
-        // Record file access
-        await fetch('/api/file-access-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ filePath: file.path }),
-        });
-
-        // Set the file for preview
-        setPreviewFile(file);
-      } catch (error) {
-        console.error('Error accessing file:', error);
-        toast.error('Failed to access file');
+  const handleFileClick = async (item: FileItem) => {
+    if (item.type === 'folder') {
+      setCurrentFolder(item.path.replace('files/', ''));
+      return;
+    }
+    
+    try {
+      // Record file access
+      await fetch('/api/file-access-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filePath: item.path }),
+      });
+      
+      // Set the selected file for preview
+      setSelectedFile(item);
+      
+      // For text files, fetch the content
+      const fileExtension = item.name.split('.').pop()?.toLowerCase();
+      if (['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '')) {
+        const response = await fetch(item.url);
+        const text = await response.text();
+        setTextContent(text);
       }
+    } catch (error) {
+      console.error('Error handling file click:', error);
+      toast.error('Failed to open file');
     }
   };
 
@@ -666,91 +677,234 @@ export default function FileManager() {
   };
 
   const renderPreview = () => {
-    if (!previewFile) return null;
+    if (!selectedFile) return null;
 
-    const fileExtension = previewFile.name.split('.').pop()?.toLowerCase();
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
-    const isPDF = fileExtension === 'pdf';
-    const isVideo = ['mp4', 'webm', 'ogg'].includes(fileExtension || '');
-    const isAudio = ['mp3', 'wav', 'ogg', 'aac'].includes(fileExtension || '');
-    const isText = ['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '');
-
+    const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+    
+    // For PDFs, use a special viewer that prevents downloading
+    if (fileExtension === 'pdf') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+              <button 
+                onClick={() => setSelectedFile(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 relative">
+              <iframe
+                src={`${selectedFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}`}
+                className="w-full h-full"
+                title={selectedFile.name}
+                onContextMenu={(e) => !isAdmin && e.preventDefault()}
+              />
+              {!isAdmin && (
+                <div 
+                  className="absolute inset-0 pointer-events-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // For images, show them directly
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '')) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+              <button 
+                onClick={() => setSelectedFile(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <img 
+                src={selectedFile.url} 
+                alt={selectedFile.name} 
+                className="max-w-full max-h-[60vh] mx-auto"
+                onContextMenu={(e) => !isAdmin && e.preventDefault()}
+              />
+            </div>
+            {isAdmin && (
+              <div className="mt-4 flex justify-end">
+                <a 
+                  href={selectedFile.url} 
+                  download={selectedFile.name}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Download
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // For videos, use a video player
+    if (['mp4', 'webm', 'ogg'].includes(fileExtension || '')) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+              <button 
+                onClick={() => setSelectedFile(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <video 
+                controls 
+                className="max-w-full max-h-[60vh] mx-auto"
+                onContextMenu={(e) => !isAdmin && e.preventDefault()}
+              >
+                <source src={selectedFile.url} type={`video/${fileExtension}`} />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            {isAdmin && (
+              <div className="mt-4 flex justify-end">
+                <a 
+                  href={selectedFile.url} 
+                  download={selectedFile.name}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Download
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // For audio files
+    if (['mp3', 'wav', 'ogg', 'aac'].includes(fileExtension || '')) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl w-full flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+              <button 
+                onClick={() => setSelectedFile(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center p-4">
+              <audio 
+                controls 
+                className="w-full"
+                onContextMenu={(e) => !isAdmin && e.preventDefault()}
+              >
+                <source src={selectedFile.url} type={`audio/${fileExtension}`} />
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+            {isAdmin && (
+              <div className="mt-4 flex justify-end">
+                <a 
+                  href={selectedFile.url} 
+                  download={selectedFile.name}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Download
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // For text files
+    if (['txt', 'md', 'json', 'js', 'ts', 'html', 'css', 'xml', 'csv'].includes(fileExtension || '')) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-4 max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+              <button 
+                onClick={() => setSelectedFile(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-gray-50 p-4 rounded">
+              <pre className="whitespace-pre-wrap text-sm text-black">
+                {textContent}
+              </pre>
+            </div>
+            {isAdmin && (
+              <div className="mt-4 flex justify-end">
+                <a 
+                  href={selectedFile.url} 
+                  download={selectedFile.name}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Download
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // For other file types, show a generic preview with download option for admins only
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-lg p-4 w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-black truncate max-w-[80%]">{previewFile.name}</h2>
-            <button
-              onClick={() => setPreviewFile(null)}
+            <h2 className="text-xl font-semibold text-black">{selectedFile.name}</h2>
+            <button 
+              onClick={() => setSelectedFile(null)}
               className="text-gray-500 hover:text-gray-700"
             >
-              <FiX className="w-6 h-6" />
+              <FiX className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex-1 overflow-auto">
-            {isImage ? (
-              <div className="flex justify-center items-center h-full">
-                <img
-                  src={previewFile.url}
-                  alt={previewFile.name}
-                  className="max-h-[70vh] max-w-full object-contain"
-                />
-              </div>
-            ) : isPDF ? (
-              <div className="relative w-full h-[70vh]">
-                <iframe
-                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}`}
-                  className="w-full h-full border-0"
-                  title={previewFile.name}
-                  onContextMenu={(e) => !isAdmin && e.preventDefault()}
-                />
-                {!isAdmin && (
-                  <div 
-                    className="absolute inset-0 pointer-events-none"
-                    onContextMenu={(e) => e.preventDefault()}
-                  ></div>
-                )}
-              </div>
-            ) : isVideo ? (
-              <div className="flex justify-center items-center h-full">
-                <video
-                  src={previewFile.url}
-                  controls
-                  className="max-h-[70vh] max-w-full"
-                >
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-            ) : isAudio ? (
-              <div className="flex justify-center items-center h-full">
-                <audio
-                  src={previewFile.url}
-                  controls
-                  className="w-full max-w-md"
-                >
-                  Your browser does not support the audio element.
-                </audio>
-              </div>
-            ) : isText ? (
-              <div className="bg-gray-50 p-4 rounded-lg h-full overflow-auto">
-                <pre className="whitespace-pre-wrap text-sm text-black">{previewFile.url}</pre>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                <div className="text-6xl mb-4">{getFileIcon(previewFile.name)}</div>
-                <p className="text-gray-600 mb-4">This file type cannot be previewed.</p>
-                {isAdmin && (
-                  <a
-                    href={previewFile.url}
-                    download={previewFile.name}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FiDownload className="w-5 h-5" />
-                    Download
-                  </a>
-                )}
-              </div>
+          <div className="flex flex-col items-center justify-center p-6">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center text-blue-500">
+              {getFileIcon(selectedFile.name)}
+            </div>
+            <p className="text-gray-600 mb-4 text-center">
+              This file type cannot be previewed directly.
+            </p>
+            {isAdmin && (
+              <a 
+                href={selectedFile.url} 
+                download={selectedFile.name}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Download File
+              </a>
+            )}
+            {!isAdmin && (
+              <p className="text-sm text-gray-500">
+                Contact an administrator to download this file.
+              </p>
             )}
           </div>
         </div>
