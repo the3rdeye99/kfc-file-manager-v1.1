@@ -47,6 +47,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
+    // Add beforeunload event listener for automatic sign-out
+    const handleBeforeUnload = async () => {
+      try {
+        await signOut(auth);
+        await fetch('/api/auth/session', { method: 'DELETE' });
+      } catch (error) {
+        console.error('Error during automatic sign-out:', error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Get the ID token
@@ -78,7 +90,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
