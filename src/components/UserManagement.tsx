@@ -118,15 +118,6 @@ export default function UserManagement() {
       return;
     }
 
-    // Prevent changing admin passwords
-    if (selectedUser.role === 'admin') {
-      toast.error('Cannot change admin passwords');
-      setShowPasswordModal(false);
-      setNewPassword('');
-      setSelectedUser(null);
-      return;
-    }
-
     try {
       const response = await fetch('/api/users/change-password', {
         method: 'POST',
@@ -134,7 +125,7 @@ export default function UserManagement() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: selectedUser.uid,
+          uid: selectedUser.uid,
           newPassword: newPassword,
         }),
       });

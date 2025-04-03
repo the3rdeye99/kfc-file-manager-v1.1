@@ -5,7 +5,7 @@ import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, Uploa
 import { storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave } from 'react-icons/fi';
+import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload } from 'react-icons/fi';
 import Image from 'next/image';
 
 interface FileItem {
@@ -701,7 +701,7 @@ export default function FileManager() {
                   {isEditingContent ? 'Preview' : 'Edit'}
                 </button>
               )}
-            <button
+              <button
                 onClick={() => {
                   setPreviewFile(null);
                   setIsEditingContent(false);
@@ -741,27 +741,32 @@ export default function FileManager() {
               />
             )}
             {isPDF && (
-              <div className="relative w-full h-full">
+                  <div className="relative w-full h-full pdf-viewer-container">
+                    <style jsx global>{`
+                      .pdf-viewer-container iframe {
+                        width: 100%;
+                        height: 100%;
+                        border: none;
+                      }
+                    `}</style>
               <iframe
-                  src={`${previewFile.url}#toolbar=${isAdmin ? '1' : '0'}&navpanes=${isAdmin ? '1' : '0'}&scrollbar=1`}
+                      src={`https://docs.google.com/gview?url=${encodeURIComponent(previewFile.url)}&embedded=true`}
                 className="w-full h-full"
                 title={previewFile.name}
-                  onContextMenu={(e) => !isAdmin && e.preventDefault()}
-                />
-                {!isAdmin && (
-                  <div 
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
-                    onContextMenu={(e) => e.preventDefault()}
-                  />
-                )}
-                {!isAdmin && (
-                  <div 
-                    className="absolute top-0 left-0 w-full h-full" 
-                    onContextMenu={(e) => e.preventDefault()}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                )}
-              </div>
+                      onContextMenu={(e) => !isAdmin && e.preventDefault()}
+                      sandbox="allow-scripts allow-same-origin"
+                    />
+                    {!isAdmin && (
+                      <div 
+                        className="absolute top-0 left-0 w-full h-full" 
+                        onContextMenu={(e) => e.preventDefault()}
+                        style={{ 
+                          pointerEvents: 'none',
+                          zIndex: 1
+                        }}
+                      />
+                    )}
+                  </div>
             )}
             {isText && (
               <pre className="whitespace-pre-wrap font-mono text-sm text-black">
@@ -771,6 +776,7 @@ export default function FileManager() {
             {!isImage && !isPDF && !isText && (
               <div className="text-center py-8">
                 <p className="text-gray-500">Preview not available for this file type</p>
+                    {isAdmin && (
                 <a
                   href={previewFile.url}
                   download
@@ -778,6 +784,7 @@ export default function FileManager() {
                 >
                   Download to View
                 </a>
+                    )}
               </div>
                 )}
               </>
@@ -1129,13 +1136,26 @@ export default function FileManager() {
                 </div>
                         {isAdmin && (
                   <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                    {item.type === 'file' && (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-green-500 hover:text-green-700"
+                        title="Download file"
+                      >
+                        <FiDownload className="w-5 h-5" />
+                      </a>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setEditingItem(item);
                         setNewName(item.name);
                       }}
                       className="text-blue-500 hover:text-blue-700"
+                      title="Rename"
                     >
                       <FiEdit2 className="w-5 h-5" />
                     </button>
@@ -1145,15 +1165,16 @@ export default function FileManager() {
                         if (item.type === 'folder') {
                           handleDeleteFolder(item.path);
                         } else {
-                              handleDelete(item.path);
+                          handleDelete(item.path);
                         }
-                            }}
+                      }}
                       className="text-red-500 hover:text-red-700"
-                          >
+                      title="Delete"
+                    >
                       <FiTrash2 className="w-5 h-5" />
-                          </button>
-                      </div>
-                  )}
+                    </button>
+                  </div>
+                )}
                 </div>
             ))
           ) : (
