@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiArrowLeft, FiEdit2, FiX } from 'react-icons/fi';
+import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import { deleteUser, updateUser } from '@/app/actions/userActions';
 
 interface User {
@@ -19,8 +19,12 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newName, setNewName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const { user } = useAuth();
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -108,6 +112,47 @@ export default function UserManagement() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!selectedUser || !newPassword.trim()) {
+      toast.error('Please enter a valid password');
+      return;
+    }
+
+    // Prevent changing admin passwords
+    if (selectedUser.role === 'admin') {
+      toast.error('Cannot change admin passwords');
+      setShowPasswordModal(false);
+      setNewPassword('');
+      setSelectedUser(null);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          newPassword: newPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to change password');
+      }
+
+      toast.success('Password changed successfully');
+      setShowPasswordModal(false);
+      setNewPassword('');
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast.error('Failed to change password');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -160,13 +205,25 @@ export default function UserManagement() {
                             Edit
                           </button>
                           {user.role !== 'admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              className="text-red-600 hover:text-red-700 flex items-center gap-1"
-                            >
-                              <FiTrash2 />
-                              Delete
-                            </button>
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowPasswordModal(true);
+                                }}
+                                className="text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                              >
+                                <FiLock />
+                                Change Password
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                              >
+                                <FiTrash2 />
+                                Delete
+                              </button>
+                            </>
                           )}
                         </>
                       )}
@@ -184,7 +241,7 @@ export default function UserManagement() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Edit User</h3>
+              <h3 className="text-lg font-semibold text-black">Edit User</h3>
               <button
                 onClick={() => setEditingUser(null)}
                 className="text-gray-500 hover:text-gray-700"
@@ -194,29 +251,91 @@ export default function UserManagement() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  User Name
+                <label htmlFor="name" className="block text-sm font-medium text-black">
+                  Display Name
                 </label>
                 <input
                   type="text"
+                  id="name"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  placeholder="Enter user name"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md shadow-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUpdateUser}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700"
                 >
                   Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showPasswordModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-black">Change Password</h3>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setNewPassword('');
+                  setSelectedUser(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="newPassword" className="block text-sm font-medium text-black">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="newPassword"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setNewPassword('');
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleChangePassword}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700"
+                >
+                  Change Password
                 </button>
               </div>
             </div>

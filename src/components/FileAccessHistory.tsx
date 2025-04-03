@@ -1,130 +1,170 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiClock, FiFile, FiFolder, FiRefreshCw } from 'react-icons/fi';
+import { FiClock, FiUser, FiFile, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
 interface FileAccess {
   id: string;
   filePath: string;
+  userId: string;
   userEmail: string;
   username: string;
   timestamp: string;
 }
 
+interface PaginationData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export default function FileAccessHistory() {
   const [accessHistory, setAccessHistory] = useState<FileAccess[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<PaginationData>({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0
+  });
 
-  useEffect(() => {
-    loadAccessHistory();
-  }, []);
-
-  const loadAccessHistory = async () => {
+  const fetchAccessHistory = async () => {
     try {
-      const response = await fetch('/api/file-access');
+      setLoading(true);
+      const response = await fetch(`/api/file-access?page=${pagination.page}&limit=${pagination.limit}`);
       if (!response.ok) {
         throw new Error('Failed to fetch access history');
       }
       const data = await response.json();
       setAccessHistory(data.accessHistory);
-    } catch (error) {
-      console.error('Error loading access history:', error);
-      toast.error('Failed to load access history');
+      setPagination({
+        total: data.total,
+        page: data.page,
+        limit: data.limit,
+        totalPages: data.totalPages
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
-  const getFileType = (path: string) => {
-    return path.endsWith('/') ? 'folder' : 'file';
+  useEffect(() => {
+    fetchAccessHistory();
+  }, [pagination.page, pagination.limit]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setPagination(prev => ({ ...prev, page: newPage }));
+    }
   };
 
-  const getFileName = (path: string) => {
-    const parts = path.split('/');
-    return parts[parts.length - 1] || 'Root';
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-red-500 text-center p-4">
+        {error}
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <FiClock className="text-blue-500" />
-          File Access History
-        </h2>
-        <button
-          onClick={loadAccessHistory}
-          className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
-        >
-          <FiRefreshCw />
-          Refresh
-        </button>
+    <div className="bg-white rounded-lg shadow p-6">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">File Access History</h2>
+      
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <label htmlFor="itemsPerPage" className="text-gray-900">Items per page:</label>
+          <select
+            id="itemsPerPage"
+            value={pagination.limit}
+            onChange={(e) => handleLimitChange(Number(e.target.value))}
+            className="border rounded px-2 py-1 text-gray-900"
+          >
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        
+        <div className="text-gray-900">
+          Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+        </div>
       </div>
+
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Type
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Path
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Username
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Date & Time
-              </th>
+        <table className="min-w-full">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-3 px-4 text-gray-900">File</th>
+              <th className="text-left py-3 px-4 text-gray-900">User</th>
+              <th className="text-left py-3 px-4 text-gray-900">Timestamp</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {accessHistory.map((access) => {
-              const fileType = getFileType(access.filePath);
-              const fileName = getFileName(access.filePath);
-              return (
-                <tr key={access.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {fileType === 'folder' ? (
-                      <FiFolder className="text-blue-500" />
-                    ) : (
-                      <FiFile className="text-gray-500" />
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {fileName}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {access.filePath}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {access.userEmail}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {access.username}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(access.timestamp).toLocaleString()}
-                  </td>
-                </tr>
-              );
-            })}
+          <tbody>
+            {accessHistory.map((access) => (
+              <tr key={access.id} className="border-b hover:bg-gray-50">
+                <td className="py-3 px-4">
+                  <div className="flex items-center space-x-2 text-gray-900">
+                    <FiFile className="text-gray-900" />
+                    <span>{access.filePath}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex items-center space-x-2 text-gray-900">
+                    <FiUser className="text-gray-900" />
+                    <span>{access.username}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex items-center space-x-2 text-gray-900">
+                    <FiClock className="text-gray-900" />
+                    <span>{new Date(access.timestamp).toLocaleString()}</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex justify-between items-center">
+        <button
+          onClick={() => handlePageChange(pagination.page - 1)}
+          disabled={pagination.page === 1}
+          className="flex items-center space-x-1 px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-900"
+        >
+          <FiChevronLeft className="text-gray-900" />
+          <span>Previous</span>
+        </button>
+        
+        <div className="text-gray-900">
+          Page {pagination.page} of {pagination.totalPages}
+        </div>
+        
+        <button
+          onClick={() => handlePageChange(pagination.page + 1)}
+          disabled={pagination.page === pagination.totalPages}
+          className="flex items-center space-x-1 px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-900"
+        >
+          <span>Next</span>
+          <FiChevronRight className="text-gray-900" />
+        </button>
       </div>
     </div>
   );

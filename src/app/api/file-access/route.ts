@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('session')?.value;
@@ -54,12 +54,27 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get pagination parameters from URL
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    
+    // Validate pagination parameters
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(100, Math.max(20, limit));
+    const offset = (validPage - 1) * validLimit;
+
     const db = getFirestore();
     
-    // Get all file access records
+    // Get total count
+    const totalSnapshot = await db.collection('fileAccess').count().get();
+    const total = totalSnapshot.data().count;
+    
+    // Get paginated file access records
     const snapshot = await db.collection('fileAccess')
       .orderBy('timestamp', 'desc')
-      .limit(100)
+      .limit(validLimit)
+      .offset(offset)
       .get();
 
     const accessHistory = snapshot.docs.map(doc => ({
@@ -68,7 +83,13 @@ export async function GET() {
       timestamp: doc.data().timestamp.toDate().toISOString()
     }));
 
-    return NextResponse.json({ accessHistory });
+    return NextResponse.json({ 
+      accessHistory,
+      total,
+      page: validPage,
+      limit: validLimit,
+      totalPages: Math.ceil(total / validLimit)
+    });
   } catch (error) {
     console.error('Error fetching file access history:', error);
     return NextResponse.json(
