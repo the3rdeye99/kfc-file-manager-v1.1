@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { storage, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload } from 'react-icons/fi';
 import Image from 'next/image';
+import { collection, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface FileItem {
   name: string;
@@ -123,6 +124,25 @@ export default function FileManager() {
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'includes_coo' | 'without_coo'>('all');
   const [newFolderCategory, setNewFolderCategory] = useState<'includes_coo' | 'without_coo'>('includes_coo');
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showNewSubFolderModal, setShowNewSubFolderModal] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
+
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000; // 2 seconds
+
+  const retryOperation = async (operation: () => Promise<any>, retries = MAX_RETRIES): Promise<any> => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (retries > 0) {
+        console.log(`Operation failed, retrying... (${retries} attempts remaining)`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return retryOperation(operation, retries - 1);
+      }
+      throw error;
+    }
+  };
 
   const loadFiles = useCallback(async () => {
     try {
@@ -359,7 +379,14 @@ export default function FileManager() {
     if (!files || files.length === 0) return;
     
     try {
-      setUploading(true);
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadSpeed(0);
+    setTimeRemaining(0);
+      setTotalSize(0);
+    lastUploadedBytes.current = 0;
+    lastUpdateTime.current = Date.now();
+    
       const uploadPromises = Array.from(files).map(async (file) => {
         try {
           // Sanitize the filename to prevent path traversal but preserve spaces
@@ -367,43 +394,95 @@ export default function FileManager() {
           
           // Always ensure we're within the 'files/' directory
           const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
-          const fileRef = ref(storage, filePath);
-          
+    const fileRef = ref(storage, filePath);
+
           // Get the current folder's category
           let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
           if (currentFolder) {
             const placeholderRef = ref(storage, `files/${currentFolder}/.placeholder`);
             try {
-              const metadata = await getMetadata(placeholderRef);
+              const metadata = await retryOperation(() => getMetadata(placeholderRef));
               folderCategory = (metadata.customMetadata?.category as 'includes_coo' | 'without_coo') || 'includes_coo';
             } catch (error) {
               console.error('Error getting folder category:', error);
             }
           }
           
-          // Upload the file with the folder's category
-          await uploadBytesResumable(fileRef, file, {
+          // Upload the file with progress tracking
+          const uploadTask = uploadBytesResumable(fileRef, file, {
             customMetadata: {
               category: folderCategory
             }
           });
           
-          const url = await getDownloadURL(fileRef);
-          const metadata = await getMetadata(fileRef);
+          return new Promise((resolve, reject) => {
+      uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                setUploadProgress(progress);
+                
+                // Calculate upload speed
+          const now = Date.now();
+          const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
+                if (timeDiff > 0) {
+          const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
+                  const speed = bytesDiff / timeDiff; // bytes per second
+          setUploadSpeed(speed);
           
-          const newFile: FileItem = {
-            name: file.name,
-            url,
-            path: filePath,
-            type: 'file',
-            parentFolder: currentFolder || 'root',
-            size: file.size,
-            lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-            category: folderCategory
-          };
-          return newFile;
-        } catch (error) {
+          // Calculate time remaining
+          const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
+          const remainingTime = remainingBytes / speed;
+          setTimeRemaining(remainingTime);
+                }
+          
+          lastUploadedBytes.current = snapshot.bytesTransferred;
+          lastUpdateTime.current = now;
+                setTotalSize(snapshot.totalBytes);
+        },
+              async (error) => {
           console.error('Error uploading file:', error);
+                if (error.code === 'storage/retry-limit-exceeded') {
+                  try {
+                    // Try to resume the upload
+                    await retryOperation(async () => {
+                      uploadTask.resume();
+                      return Promise.resolve();
+                    });
+                  } catch (retryError) {
+                    console.error('Failed to resume upload:', retryError);
+                    toast.error(`Failed to upload ${file.name} after retries`);
+                    reject(retryError);
+                  }
+                } else {
+                  toast.error(`Failed to upload ${file.name}`);
+                  reject(error);
+                }
+        },
+        async () => {
+                try {
+                  const url = await retryOperation(() => getDownloadURL(fileRef));
+                  const metadata = await retryOperation(() => getMetadata(fileRef));
+                  
+                  const newFile: FileItem = {
+                    name: file.name,
+                    url,
+                    path: filePath,
+                    type: 'file',
+                    parentFolder: currentFolder || 'root',
+                    size: file.size,
+                    lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+                    category: folderCategory
+                  };
+                  resolve(newFile);
+                } catch (error) {
+                  console.error('Error getting file metadata:', error);
+                  reject(error);
+                }
+              }
+            );
+          });
+    } catch (error) {
+      console.error('Error uploading file:', error);
           toast.error(`Failed to upload ${file.name}`);
           return null;
         }
@@ -424,6 +503,10 @@ export default function FileManager() {
       toast.error('Failed to upload files');
     } finally {
       setUploading(false);
+      setUploadProgress(0);
+      setUploadSpeed(0);
+      setTimeRemaining(0);
+      setTotalSize(0);
       // Reset the file input
       if (e.target) {
         e.target.value = '';
@@ -442,7 +525,7 @@ export default function FileManager() {
       // Ensure we're within the 'files/' directory
       const safeFilePath = filePath.startsWith('files/') ? filePath : `files/${filePath}`;
       const fileRef = ref(storage, safeFilePath);
-      await deleteObject(fileRef);
+      await retryOperation(() => deleteObject(fileRef));
       toast.success('File deleted successfully');
       loadFiles();
       
@@ -460,13 +543,22 @@ export default function FileManager() {
     } else {
       try {
         // Record file access
-        await fetch('/api/file-access-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ filePath: file.path }),
-        });
+        try {
+          const response = await fetch('/api/file-access-history', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filePath: file.path }),
+          });
+          
+          if (!response.ok) {
+            console.error('Failed to record file access history:', await response.text());
+          }
+        } catch (historyError) {
+          console.error('Error recording file access history:', historyError);
+          // Continue with file preview even if history recording fails
+        }
 
         // Set the file for preview
         setPreviewFile(file);
@@ -497,151 +589,152 @@ export default function FileManager() {
     }
   };
 
-  const handleRename = async (item: FileItem, newName: string) => {
-    if (!isAdmin) return;
-    
+  const handleRename = async () => {
+    if (!editingItem || !newName.trim()) return;
+
     try {
-      // Validate the new name
-      if (!newName || newName.trim() === '') {
-        toast.error('Please enter a valid name');
-        return;
+      // Ensure we're working with the correct path format
+      const oldPath = editingItem.path.startsWith('files/') ? editingItem.path : `files/${editingItem.path}`;
+      
+      // Preserve the file extension
+      let newFileName = newName.trim();
+      if (editingItem.type === 'file') {
+        const fileExtension = editingItem.name.split('.').pop();
+        if (fileExtension && !newFileName.endsWith(`.${fileExtension}`)) {
+          newFileName = `${newFileName}.${fileExtension}`;
+        }
       }
       
-      // Check if a file with the same name already exists
-      const existingFile = files.find(file => 
-        file.name === newName && 
-        file.parentFolder === item.parentFolder && 
-        file.path !== item.path
-      );
+      const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newFileName;
       
-      if (existingFile) {
-        toast.error('A file with this name already exists in this folder');
-        return;
-      }
+      // Encode paths for Firestore document IDs
+      const encodedOldPath = encodeURIComponent(oldPath);
+      const encodedNewPath = encodeURIComponent(newPath);
       
-      if (item.type === 'folder') {
-        // For folders, we need to rename the placeholder file
-        const oldPlaceholderPath = `${item.path}/.placeholder`;
-        const newPlaceholderPath = `${item.parentFolder}/${newName}/.placeholder`;
+      if (editingItem.type === 'folder') {
+        // For folders, we need to update all files within it
+        const folderFiles = files.filter(file => file.path.startsWith(oldPath + '/'));
         
-        // Ensure we're within the 'files/' directory
-        const safeOldPath = oldPlaceholderPath.startsWith('files/') ? oldPlaceholderPath : `files/${oldPlaceholderPath}`;
-        const safeNewPath = newPlaceholderPath.startsWith('files/') ? newPlaceholderPath : `files/${newPlaceholderPath}`;
-        
-        // Create new folder structure first
-        const newFolderPath = `${item.parentFolder}/${newName}`;
-        const safeNewFolderPath = newFolderPath.startsWith('files/') ? newFolderPath : `files/${newFolderPath}`;
-        const newFolderRef = ref(storage, safeNewFolderPath);
-        
-        // Create a temporary placeholder in the new folder
-        await uploadBytesResumable(ref(storage, `${safeNewFolderPath}/.temp`), new Uint8Array(0));
-        
-        // List contents of the old folder
-        const oldFolderRef = ref(storage, item.path);
-        const result = await listAll(oldFolderRef);
-        
-        // Move all files
-        const movePromises = result.items.map(async (file) => {
-          const newPath = file.fullPath.replace(item.path, safeNewFolderPath);
-          const newRef = ref(storage, newPath);
+        // Create new folder metadata with the new path
+        await retryOperation(() => setDoc(doc(db, 'fileMetadata', encodedNewPath), {
+          path: newPath,
+          name: newFileName,
+          type: 'folder',
+          category: editingItem.category || 'includes_coo',
+          createdAt: editingItem.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
+
+        // Create new placeholder file for the renamed folder
+        const newPlaceholderRef = ref(storage, `${newPath}/.placeholder`);
+        const emptyBlob = new Blob([''], { type: 'text/plain' });
+        await retryOperation(async () => {
+          await uploadBytesResumable(newPlaceholderRef, emptyBlob, {
+            customMetadata: {
+              category: editingItem.category || 'includes_coo'
+            }
+          });
+        });
+
+        // Update all files within the folder
+        for (const file of folderFiles) {
+          const newFilePath = file.path.replace(oldPath, newPath);
+          const encodedFilePath = encodeURIComponent(file.path);
+          const encodedNewFilePath = encodeURIComponent(newFilePath);
           
-          // Get the file content and metadata directly from Firebase Storage
-          const fileRef = ref(storage, file.fullPath);
-          const metadata = await getMetadata(fileRef);
+          // Get the file content
+          const fileRef = ref(storage, file.path);
+          const fileBlob = await retryOperation(() => getBlob(fileRef));
           
-          // Create a new file with the same content and metadata
-          const emptyBlob = new Blob([], { type: 'application/octet-stream' });
-          await uploadBytesResumable(newRef, emptyBlob, {
-            customMetadata: metadata.customMetadata
+          // Get the current metadata
+          const metadata = await retryOperation(() => getMetadata(fileRef));
+          
+          // Create a new file with the new path
+          const newFileRef = ref(storage, newFilePath);
+          await retryOperation(async () => {
+            await uploadBytesResumable(newFileRef, fileBlob, {
+              customMetadata: metadata.customMetadata
+            });
           });
           
           // Delete the old file
-          await deleteObject(file);
-        });
-        
-        await Promise.all(movePromises);
-        
-        // Move all subfolders recursively
-        const moveFolderPromises = result.prefixes.map(prefix => 
-          handleRename(
-            { 
-              ...prefix,
-              type: 'folder',
-              url: '',
-              parentFolder: safeNewFolderPath,
-              path: prefix.fullPath
-            },
-            prefix.name
-          )
-        );
-        await Promise.all(moveFolderPromises);
-        
-        // Create the final placeholder in the new folder
-        await uploadBytesResumable(ref(storage, safeNewPath), new Uint8Array(0));
-        
-        // Clean up old folder
+          await retryOperation(() => deleteObject(fileRef));
+          // Create new metadata for the file with updated path
+          await retryOperation(() => setDoc(doc(db, 'fileMetadata', encodedNewFilePath), {
+            path: newFilePath,
+            name: file.name,
+            type: 'file',
+            size: file.size,
+            category: file.category || 'includes_coo',
+            createdAt: file.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }));
+        }
+
+        // Delete the old folder metadata and placeholder if they exist
         try {
-          const oldPlaceholderRef = ref(storage, safeOldPath);
-          await deleteObject(oldPlaceholderRef);
-          await deleteObject(ref(storage, `${safeOldPath}/.temp`));
+          const oldFolderRef = doc(db, 'fileMetadata', encodedOldPath);
+          await retryOperation(() => deleteDoc(oldFolderRef));
+          
+          const oldPlaceholderRef = ref(storage, `${oldPath}/.placeholder`);
+          await retryOperation(() => deleteObject(oldPlaceholderRef));
         } catch (error) {
-          console.log('Error cleaning up old folder:', error);
+          console.log('Old folder metadata or placeholder not found, skipping deletion');
         }
       } else {
-        // For files, we can simply rename them
-        const newPath = `${item.parentFolder}/${newName}`;
-        // Ensure we're within the 'files/' directory
-        const safeNewPath = newPath.startsWith('files/') ? newPath : `files/${newPath}`;
-        const safeOldPath = item.path.startsWith('files/') ? item.path : `files/${item.path}`;
+        // For files, we need to:
+        // 1. Get the file content
+        // 2. Create a new file with the new name
+        // 3. Delete the old file
+        // 4. Update metadata
         
-        // Get the file metadata
-        const oldRef = ref(storage, safeOldPath);
-        const metadata = await getMetadata(oldRef);
+        // Get the file content
+        const fileRef = ref(storage, oldPath);
+        const fileBlob = await retryOperation(() => getBlob(fileRef));
         
-        // Create a new reference with the new path
-        const newRef = ref(storage, safeNewPath);
+        // Get the current metadata
+        const metadata = await retryOperation(() => getMetadata(fileRef));
         
-        // Create a new file with the same metadata
-        const emptyBlob = new Blob([], { type: 'application/octet-stream' });
-        await uploadBytesResumable(newRef, emptyBlob, {
-          customMetadata: metadata.customMetadata
+        // Create a new file with the new name
+        const newFileRef = ref(storage, newPath);
+        await retryOperation(async () => {
+          await uploadBytesResumable(newFileRef, fileBlob, {
+            customMetadata: metadata.customMetadata
+          });
         });
         
         // Delete the old file
-        await deleteObject(oldRef);
+        await retryOperation(() => deleteObject(fileRef));
+        // Create new metadata for the file
+        await retryOperation(() => setDoc(doc(db, 'fileMetadata', encodedNewPath), {
+          path: newPath,
+          name: newFileName,
+          type: 'file',
+          size: metadata.size,
+          contentType: metadata.contentType,
+          category: metadata.customMetadata?.category || 'includes_coo',
+          createdAt: metadata.timeCreated,
+          updatedAt: new Date().toISOString()
+        }));
+
+        // Delete the old metadata if it exists
+        try {
+          const oldMetadataRef = doc(db, 'fileMetadata', encodedOldPath);
+          await retryOperation(() => deleteDoc(oldMetadataRef));
+        } catch (error) {
+          console.log('Old file metadata not found, skipping deletion');
+        }
       }
-      
-      // Update the UI immediately
-      setFiles(prevFiles => {
-        return prevFiles.map(file => {
-          if (file.path === item.path) {
-            return {
-              ...file,
-              name: newName,
-              path: item.type === 'folder' 
-                ? `${item.parentFolder}/${newName}`
-                : `${item.parentFolder}/${newName}`
-            };
-          }
-          return file;
-        });
-      });
-      
-      toast.success('Item renamed successfully');
+
+      // Refresh the file list
+      await loadFiles();
       setEditingItem(null);
       setNewName('');
-      
-      // Refresh the file list to ensure everything is in sync
-      await loadFiles();
-      
-      // Also refresh the allFiles list for search
-      await loadAllFiles();
-      
-      // Dispatch event to notify StorageDashboard
-      window.dispatchEvent(new Event('fileRenamed'));
+      setShowRenameModal(false);
+      toast.success('Item renamed successfully');
     } catch (error) {
       console.error('Error renaming item:', error);
-      toast.error('Failed to rename item');
+      toast.error('Failed to rename item. Please try again.');
     }
   };
 
@@ -810,13 +903,22 @@ export default function FileManager() {
       
       const parentPath = currentFolder.split('/').slice(0, -1).join('/');
       // Record folder access
-      await fetch('/api/file-access-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filePath: parentPath || 'files' }),
-      });
+      try {
+        const response = await fetch('/api/file-access-history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ filePath: parentPath || 'files' }),
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to record folder access history:', await response.text());
+        }
+      } catch (historyError) {
+        console.error('Error recording folder access history:', historyError);
+        // Continue with navigation even if history recording fails
+      }
       setCurrentFolder(parentPath);
     } catch (error) {
       console.error('Error navigating up:', error);
@@ -854,6 +956,8 @@ export default function FileManager() {
       toast.success('Folder created successfully');
       setNewFolderName('');
       setShowNewFolderInput(false);
+      setShowNewSubFolderModal(false);
+      setSelectedFolder(null);
       loadFiles();
       
       // Dispatch event to notify StorageDashboard
@@ -862,6 +966,14 @@ export default function FileManager() {
       console.error('Error creating folder:', error);
       toast.error('Failed to create folder');
     }
+  };
+
+  const handleCreateSubFolder = (folder: FileItem) => {
+    setSelectedFolder(folder);
+    setNewFolderName('');
+    // Inherit the parent folder's category
+    setNewFolderCategory(folder.category || 'includes_coo');
+    setShowNewSubFolderModal(true);
   };
 
   const handleDeleteFolder = async (folderPath: string) => {
@@ -910,13 +1022,22 @@ export default function FileManager() {
   const handleFolderClick = async (folder: FileItem) => {
     try {
       // Record folder access
-      await fetch('/api/file-access-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filePath: folder.path }),
-      });
+      try {
+        const response = await fetch('/api/file-access-history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ filePath: folder.path }),
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to record folder access history:', await response.text());
+        }
+      } catch (historyError) {
+        console.error('Error recording folder access history:', historyError);
+        // Continue with navigation even if history recording fails
+      }
 
       // Ensure we're within the 'files/' directory
       const safePath = folder.path.startsWith('files/') ? folder.path.replace('files/', '') : folder.path;
@@ -968,6 +1089,18 @@ export default function FileManager() {
                 </button>
               )}
             </div>
+          {isAdmin && currentFolder && (
+            <div className="flex items-center gap-2">
+                  <button
+                onClick={() => handleCreateSubFolder({ name: currentFolder, path: `files/${currentFolder}`, url: '', type: 'folder', parentFolder: '' })}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                title="Create sub-folder"
+                  >
+                <FiFolderPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Sub-Folder</span>
+                  </button>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <div className="flex items-center gap-2">
@@ -981,7 +1114,7 @@ export default function FileManager() {
               <option value="without_coo">Without C of O</option>
             </select>
           </div>
-                  <button
+              <button
             onClick={handleRefresh}
             className={`p-2 rounded ${isRefreshing ? 'bg-blue-100 text-blue-600 animate-spin' : 'text-gray-500 hover:text-gray-700'}`}
             disabled={isRefreshing}
@@ -1071,40 +1204,9 @@ export default function FileManager() {
                     </div>
                   )}
                   <div className={viewMode === 'grid' ? 'text-center' : ''}>
-                    {editingItem?.path === item.path ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={newName}
-                          onChange={(e) => setNewName(e.target.value)}
-                          className="px-2 py-1 border rounded text-black"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                            handleRename(item, newName);
-                        }}
-                          className="text-green-500 hover:text-green-600"
-                      >
-                          <FiSave className="w-4 h-4" />
-                      </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingItem(null);
-                            setNewName('');
-                          }}
-                          className="text-red-500 hover:text-red-600"
-                        >
-                          <FiX className="w-4 h-4" />
-                        </button>
+                    <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
+                      {item.name}
                     </div>
-                  ) : (
-                      <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
-                        {item.name}
-                      </div>
-                    )}
                     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 text-xs text-gray-500">
                       {item.size !== undefined && (
                         <span className="whitespace-nowrap">{formatBytes(item.size)}</span>
@@ -1148,34 +1250,38 @@ export default function FileManager() {
                         <FiDownload className="w-5 h-5" />
                       </a>
                     )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingItem(item);
-                        setNewName(item.name);
-                      }}
-                      className="text-blue-500 hover:text-blue-700"
-                      title="Rename"
-                    >
-                      <FiEdit2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    {/* Show rename button only for files in root */}
+                    {item.type === 'file' && !item.parentFolder && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingItem(item);
+                          setNewName(item.name);
+                          setShowRenameModal(true);
+                        }}
+                        className="text-blue-500 hover:text-blue-700"
+                        title="Rename"
+                      >
+                        <FiEdit2 className="w-5 h-5" />
+                      </button>
+                    )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                         if (item.type === 'folder') {
-                          handleDeleteFolder(item.path);
+                            handleDeleteFolder(item.path);
                         } else {
                           handleDelete(item.path);
                         }
-                      }}
+                          }}
                       className="text-red-500 hover:text-red-700"
                       title="Delete"
-                    >
+                        >
                       <FiTrash2 className="w-5 h-5" />
-                    </button>
+                        </button>
                   </div>
-                )}
-                </div>
+                      )}
+                    </div>
             ))
           ) : (
               <p className="text-center text-gray-500 py-4 col-span-full">
@@ -1192,7 +1298,7 @@ export default function FileManager() {
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-black">Create New Folder</h2>
-              <button 
+                          <button
                 onClick={() => {
                   setShowNewFolderInput(false);
                   setNewFolderName('');
@@ -1200,8 +1306,8 @@ export default function FileManager() {
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FiX className="w-5 h-5" />
-              </button>
-          </div>
+                          </button>
+                      </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Folder Name</label>
               <input
@@ -1212,7 +1318,7 @@ export default function FileManager() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
                 autoFocus
               />
-          </div>
+                </div>
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
@@ -1223,11 +1329,142 @@ export default function FileManager() {
                 <option value="includes_coo">Includes C of O</option>
                 <option value="without_coo">Without C of O</option>
               </select>
+              </div>
+            <div className="flex justify-end gap-3">
+                          <button
+                onClick={() => {
+                  setShowNewFolderInput(false);
+                  setNewFolderName('');
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+                          </button>
+              <button
+                onClick={createFolder}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
+              >
+                Create
+              </button>
+                      </div>
+                </div>
+              </div>
+      )}
+
+      {/* Rename Modal */}
+      {showRenameModal && editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">Rename {editingItem.type === 'folder' ? 'Folder' : 'File'}</h2>
+              <button 
+                onClick={() => {
+                  setShowRenameModal(false);
+                  setEditingItem(null);
+                  setNewName('');
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+          </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">New Name</label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={`Enter new ${editingItem.type} name`}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleRename();
+                  }
+                }}
+              />
+              {editingItem.type === 'file' && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Note: The file extension will be preserved automatically.
+              </p>
+            )}
+          </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowRenameModal(false);
+                  setEditingItem(null);
+                  setNewName('');
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRename()}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+              >
+                Rename
+              </button>
+        </div>
+      </div>
+        </div>
+      )}
+
+      {/* Upload Progress Bar */}
+      {uploading && (
+        <div className="fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-lg w-80">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-700">Uploading...</span>
+            <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>{formatBytes(lastUploadedBytes.current)} / {formatBytes(totalSize)}</span>
+            <span>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : 'Calculating...'}</span>
+            <span>{timeRemaining > 0 ? `${formatTime(timeRemaining)} remaining` : 'Almost done'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* New Sub-Folder Modal */}
+      {showNewSubFolderModal && selectedFolder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black">Create Sub-Folder in {selectedFolder.name}</h2>
+              <button
+                onClick={() => {
+                  setShowNewSubFolderModal(false);
+                  setSelectedFolder(null);
+                  setNewFolderName('');
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Folder Name</label>
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Enter folder name"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                autoFocus
+              />
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setShowNewFolderInput(false);
+                  setShowNewSubFolderModal(false);
+                  setSelectedFolder(null);
                   setNewFolderName('');
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"

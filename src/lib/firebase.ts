@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,6 +12,17 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase
+let app;
+try {
+  console.log('Initializing Firebase client app');
+  app = initializeApp(firebaseConfig);
+  console.log('Firebase client app initialized successfully');
+} catch (error) {
+  console.error('Error initializing Firebase client app:', error);
+  throw error;
+}
+
 export const auth = getAuth(app);
-export const storage = getStorage(app); 
+export const storage = getStorage(app);
+export const db = getFirestore(app); 

@@ -11,12 +11,19 @@ let adminApp: ReturnType<typeof getAuth> | null = null;
 
 export function getAdminAuth() {
   if (!adminApp) {
-    if (getApps().length === 0) {
-      initializeApp({
-        credential: cert(firebaseAdminConfig),
-      });
+    try {
+      if (getApps().length === 0) {
+        console.log('Initializing Firebase Admin app');
+        initializeApp({
+          credential: cert(firebaseAdminConfig),
+        });
+      }
+      adminApp = getAuth();
+      console.log('Firebase Admin Auth initialized successfully');
+    } catch (error) {
+      console.error('Error initializing Firebase Admin:', error);
+      throw error;
     }
-    adminApp = getAuth();
   }
   return adminApp;
 } 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiClock, FiUser, FiFile, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface FileAccess {
   id: string;
@@ -30,34 +31,78 @@ export default function FileAccessHistory() {
     limit: 20,
     totalPages: 0
   });
+  const { user } = useAuth();
+
+  const initializeFirestore = async () => {
+    try {
+      console.log('Initializing Firestore...');
+      const response = await fetch('/api/init-firestore');
+      
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(`API Error: ${response.status} ${JSON.stringify(errorBody)}`);
+      }
+      
+      console.log('Firestore initialized successfully');
+    } catch (err) {
+      console.error('Error initializing Firestore:', err);
+      // Continue with fetching access history even if initialization fails
+    }
+  };
 
   const fetchAccessHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/file-access-history?page=${pagination.page}&limit=${pagination.limit}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch access history');
+      setError(null);
+      
+      // Ensure user is authenticated
+      if (!user) {
+        setError('You must be logged in to view access history');
+        setLoading(false);
+        return;
       }
+      
+      // Initialize Firestore first
+      await initializeFirestore();
+      
+      console.log('Fetching access history...');
+      const response = await fetch(`/api/file-access-history?page=${pagination.page}&limit=${pagination.limit}`);
+      
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(`API Error: ${response.status} ${JSON.stringify(errorBody)}`);
+      }
+      
       const data = await response.json();
+      console.log('Access history data:', data);
+      
+      if (!data.accessHistory) {
+        console.error('Invalid response format:', data);
+        throw new Error('Invalid response format');
+      }
+      
       setAccessHistory(data.accessHistory);
       setPagination({
-        total: data.total,
-        page: data.page,
-        limit: data.limit,
-        totalPages: data.totalPages
+        total: data.total || 0,
+        page: data.page || 1,
+        limit: data.limit || 20,
+        totalPages: data.totalPages || 0
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);
-      toast.error('Failed to fetch access history');
+      toast.error(`Failed to fetch access history: ${errorMessage}`);
+      console.error('Error fetching access history:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAccessHistory();
-  }, [pagination.page, pagination.limit]);
+    if (user) {
+      fetchAccessHistory();
+    }
+  }, [pagination.page, pagination.limit, user]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
@@ -80,7 +125,32 @@ export default function FileAccessHistory() {
   if (error) {
     return (
       <div className="text-red-500 text-center p-4">
-        {error}
+        <p className="mb-2">{error}</p>
+        <button 
+          onClick={fetchAccessHistory}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="text-center p-4">
+        <p className="mb-2">You must be logged in to view access history</p>
+      </div>
+    );
+  }
+
+  if (accessHistory.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-6 text-gray-900">File Access History</h2>
+        <div className="text-center p-8">
+          <p className="text-gray-500">No access history found</p>
+        </div>
       </div>
     );
   }
@@ -130,7 +200,7 @@ export default function FileAccessHistory() {
                 <td className="py-3 px-4">
                   <div className="flex items-center space-x-2 text-gray-900">
                     <FiUser className="text-gray-900" />
-                    <span>{access.username}</span>
+                    <span>{access.username || access.userEmail || 'Unknown'}</span>
                   </div>
                 </td>
                 <td className="py-3 px-4">

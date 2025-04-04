@@ -1,65 +1,69 @@
-import { NextResponse } from 'next/server';
-import { getAdminAuth } from '@/lib/firebase-admin-server';
-import { getFirestore } from 'firebase-admin/firestore';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const filePath = searchParams.get('path');
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session');
     
-    if (!filePath) {
-      return NextResponse.json(
-        { error: 'File path is required' },
-        { status: 400 }
-      );
+    if (!sessionCookie) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const auth = getAdminAuth();
-    const db = getFirestore();
-    
-    // Get the file access settings from Firestore
-    const doc = await db.collection('fileAccess').doc(filePath).get();
-    
-    if (!doc.exists) {
-      return NextResponse.json({ access: 'public' });
+    const url = new URL(request.url);
+    const filePath = url.searchParams.get('filePath');
+
+    if (!filePath) {
+      return NextResponse.json({ error: 'File path is required' }, { status: 400 });
     }
-    
-    return NextResponse.json(doc.data());
+
+    // Check if user has access to this file
+    const fileAccessRef = doc(db, 'fileAccess', filePath);
+    const fileAccessDoc = await getDoc(fileAccessRef);
+
+    if (!fileAccessDoc.exists()) {
+      return NextResponse.json({ hasAccess: false });
+    }
+
+    const fileAccess = fileAccessDoc.data();
+    const hasAccess = fileAccess.allowedUsers.includes(sessionCookie.value);
+
+    return NextResponse.json({ hasAccess });
   } catch (error) {
-    console.error('Error getting file access:', error);
-    return NextResponse.json(
-      { error: 'Failed to get file access' },
-      { status: 500 }
-    );
+    console.error('Error checking file access:', error);
+    return NextResponse.json({ error: 'Failed to check file access' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { filePath, access } = await request.json();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session');
     
-    if (!filePath || !access) {
-      return NextResponse.json(
-        { error: 'File path and access level are required' },
-        { status: 400 }
-      );
+    if (!sessionCookie) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const auth = getAdminAuth();
-    const db = getFirestore();
-    
-    // Update the file access settings in Firestore
-    await db.collection('fileAccess').doc(filePath).set({
-      access,
+    const body = await request.json();
+    const { filePath, allowedUsers } = body;
+
+    if (!filePath || !allowedUsers || !Array.isArray(allowedUsers)) {
+      return NextResponse.json({ error: 'File path and allowed users are required' }, { status: 400 });
+    }
+
+    // Set file access permissions
+    const fileAccessRef = doc(db, 'fileAccess', filePath);
+    await setDoc(fileAccessRef, {
+      filePath,
+      allowedUsers,
       updatedAt: new Date().toISOString()
     });
-    
-    return NextResponse.json({ status: 'success' });
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating file access:', error);
-    return NextResponse.json(
-      { error: 'Failed to update file access' },
-      { status: 500 }
-    );
+    console.error('Error setting file access:', error);
+    return NextResponse.json({ error: 'Failed to set file access' }, { status: 500 });
   }
 } 
