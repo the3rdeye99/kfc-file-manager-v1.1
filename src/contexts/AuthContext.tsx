@@ -47,21 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
-    // Add visibility change event listener for production mode
-    const handleVisibilityChange = async () => {
-      if (process.env.NODE_ENV === 'production' && document.visibilityState === 'hidden') {
-        try {
-          await signOut(auth);
-          await fetch('/api/auth/session', { method: 'DELETE' });
-        } catch (error) {
-          console.error('Error during visibility change sign-out:', error);
-        }
-      }
-    };
-
-    // Add beforeunload event listener for development mode
+    // Add beforeunload event listener for tab closing
     const handleBeforeUnload = async () => {
-      if (process.env.NODE_ENV !== 'production') {
+      if (process.env.NODE_ENV === 'production') {
         try {
           await signOut(auth);
           await fetch('/api/auth/session', { method: 'DELETE' });
@@ -71,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -107,7 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
