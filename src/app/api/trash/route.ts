@@ -3,9 +3,8 @@ import { cookies } from 'next/headers';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit as firestoreLimit, startAfter, getDocs, addDoc, getCountFromServer, where, getFirestore, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { getAdminAuth } from '@/lib/firebase-admin-server';
-import { ref, deleteObject, getDownloadURL, getBlob } from 'firebase/storage';
+import { ref, deleteObject, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import { uploadDeletedFileToGCS, ensureDeletedFilesBucketExists } from '@/lib/google-cloud-storage';
 
 // Get items in the trash bin
 export async function GET(request: NextRequest) {
@@ -163,33 +162,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Ensure the GCS bucket exists
-    await ensureDeletedFilesBucketExists();
-
-    // Upload file to GCS if it's a file (not a folder)
-    let gcsUrl = null;
-    if (fileType === 'file') {
-      try {
-        // Get the file from Firebase Storage
-        const fileRef = ref(storage, filePath);
-        const blob = await getBlob(fileRef);
-        
-        // Get file metadata
-        const metadata = await getDownloadURL(fileRef);
-        
-        // Upload to GCS
-        gcsUrl = await uploadDeletedFileToGCS(filePath, blob, {
-          contentType: blob.type,
-          originalUrl: metadata
-        });
-        
-        console.log(`File uploaded to GCS: ${gcsUrl}`);
-      } catch (uploadError) {
-        console.error('Error uploading file to GCS:', uploadError);
-        // Continue with trash bin operation even if GCS upload fails
-      }
-    }
-
     // Add to trash bin
     try {
       const username = userEmail.split('@')[0]; // Extract username from email
@@ -205,8 +177,7 @@ export async function POST(request: NextRequest) {
         expiresAt: Timestamp.fromDate(expiresAt),
         userId: sessionCookie.value,
         userEmail: userEmail,
-        username: username,
-        gcsUrl: gcsUrl // Store the GCS URL if available
+        username: username
       });
       
       console.log(`Moved ${filePath} to trash by ${username}`);
