@@ -25,13 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if auth is initialized
-    if (!auth) {
-      console.error('Firebase Auth is not initialized');
-      setLoading(false);
-      return;
-    }
-
     // Check if there's a session cookie
     const checkSession = async () => {
       try {
@@ -104,9 +97,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    if (!auth) {
-      throw new Error('Firebase Auth is not initialized');
-    }
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
@@ -116,9 +106,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signup = async (email: string, password: string) => {
-    if (!auth) {
-      throw new Error('Firebase Auth is not initialized');
-    }
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (error) {
@@ -128,9 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    if (!auth) {
-      throw new Error('Firebase Auth is not initialized');
-    }
     try {
       await signOut(auth);
     } catch (error) {

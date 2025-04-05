@@ -12,25 +12,17 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase only on the client side
+// Initialize Firebase
 let app;
-let auth;
-let storage;
-let db;
-
-// Check if we're in a browser environment
-if (typeof window !== 'undefined') {
-  try {
-    console.log('Initializing Firebase client app');
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    storage = getStorage(app);
-    db = getFirestore(app);
-    console.log('Firebase client app initialized successfully');
-  } catch (error) {
-    console.error('Error initializing Firebase client app:', error);
-    throw error;
-  }
+try {
+  console.log('Initializing Firebase client app');
+  app = initializeApp(firebaseConfig);
+  console.log('Firebase client app initialized successfully');
+} catch (error) {
+  console.error('Error initializing Firebase client app:', error);
+  throw error;
 }
 
-export { auth, storage, db }; 
+export const auth = getAuth(app);
+export const storage = getStorage(app);
+export const db = getFirestore(app); 
