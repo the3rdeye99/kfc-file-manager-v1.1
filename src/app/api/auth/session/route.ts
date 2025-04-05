@@ -18,6 +18,8 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
+      sameSite: 'lax',
+      ...(process.env.NODE_ENV === 'production' ? { maxAge: undefined } : {})
     });
 
     return response;
