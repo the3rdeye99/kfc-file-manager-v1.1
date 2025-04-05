@@ -19,6 +19,7 @@ interface TrashItem {
     nanoseconds: number;
   };
   username: string;
+  gcsUrl?: string;
 }
 
 interface PaginationData {
@@ -141,6 +142,7 @@ export default function TrashBin() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Deleted By</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Deleted At</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Expires In</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Backup</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -152,6 +154,20 @@ export default function TrashBin() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-black">{formatDate(item.deletedAt)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
                       {getDaysRemaining(item.expiresAt)} days
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
+                      {item.gcsUrl ? (
+                        <a 
+                          href={item.gcsUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          View Backup
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">No backup</span>
+                      )}
                     </td>
                   </tr>
                 ))}

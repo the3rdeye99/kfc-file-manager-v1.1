@@ -12,6 +12,7 @@
   "dependencies": {
     "@firebase/auth": "^1.9.1",
     "@firebase/storage": "^0.13.7",
+    "@google-cloud/storage": "^7.16.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.2",
     "date-fns": "^4.1.0",

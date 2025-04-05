@@ -5,6 +5,19 @@ import { collection, query, where, getDocs, deleteDoc, doc, Timestamp } from 'fi
 import { getAdminAuth } from '@/lib/firebase-admin-server';
 import { ref, deleteObject } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
+import { Storage } from '@google-cloud/storage';
+
+// Initialize Google Cloud Storage client
+const gcsStorage = new Storage({
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  credentials: {
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  },
+});
+
+// Get the bucket for deleted files
+const deletedFilesBucket = gcsStorage.bucket(process.env.GCS_DELETED_FILES_BUCKET || '');
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,6 +84,9 @@ export async function POST(request: NextRequest) {
             const fileRef = ref(storage, item.filePath);
             await deleteObject(fileRef);
             console.log(`Deleted file ${item.filePath} from storage`);
+            
+            // Note: We don't delete from GCS as these are permanent backups
+            // The GCS files will remain in the bucket for long-term storage
           } catch (deleteError) {
             console.error(`Error deleting file ${item.filePath} from storage:`, deleteError);
             errors.push({
@@ -101,12 +117,12 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {
-    console.error('Error cleaning up trash bin:', error);
+    console.error('Error cleaning up trash:', error);
     return NextResponse.json({ 
       error: 'Internal Server Error', 
-      message: 'Failed to clean up trash bin',
+      message: 'Failed to clean up trash',
       details: error instanceof Error ? error.message : String(error),
-      code: 'CLEANUP_TRASH_FAILED'
+      code: 'CLEANUP_FAILED'
     }, { status: 500 });
   }
 } 
