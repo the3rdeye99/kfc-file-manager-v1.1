@@ -5,23 +5,32 @@ import { useRouter } from 'next/navigation';
 import { signup } from '@/app/actions/userActions';
 import toast from 'react-hot-toast';
 import { FiArrowLeft, FiEye, FiEyeOff } from 'react-icons/fi';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
+
+  // Redirect if not admin
+  if (!user?.email?.includes('admin')) {
+    router.push('/');
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await signup(email, password, username);
+      await signup(email, password, username, role);
       toast.success('Account created successfully');
-      router.push('/login');
+      router.push('/users');
     } catch (error: unknown) {
       console.error('Signup error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create account');
@@ -92,7 +101,7 @@ export default function SignupPage() {
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -108,6 +117,22 @@ export default function SignupPage() {
                   <FiEye className="h-5 w-5" />
                 )}
               </button>
+            </div>
+            <div>
+              <label htmlFor="role" className="sr-only">
+                Role
+              </label>
+              <select
+                id="role"
+                name="role"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                value={role}
+                onChange={(e) => setRole(e.target.value as 'viewer' | 'editor')}
+              >
+                <option value="viewer">Viewer (View only)</option>
+                <option value="editor">Editor (View and Download)</option>
+              </select>
             </div>
           </div>
 

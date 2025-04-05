@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
-import { deleteUser, updateUser } from '@/app/actions/userActions';
+import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff, FiUser } from 'react-icons/fi';
+import { deleteUser, updateUser, updateUserRole } from '@/app/actions/userActions';
 
 interface User {
   uid: string;
   email: string;
-  role: 'admin' | 'viewer';
+  role: 'admin' | 'viewer' | 'editor';
   displayName: string;
 }
 
@@ -18,6 +18,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingRole, setEditingRole] = useState<User | null>(null);
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -144,6 +145,18 @@ export default function UserManagement() {
     }
   };
 
+  const handleChangeRole = async (user: User, newRole: 'viewer' | 'editor') => {
+    try {
+      await updateUserRole(user.uid, newRole);
+      toast.success(`User role updated to ${newRole}`);
+      setEditingRole(null);
+      loadUsers();
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast.error('Failed to update user role');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -176,13 +189,19 @@ export default function UserManagement() {
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <div className={`h-2 w-2 rounded-full ${
-                          user.role === 'admin' ? 'bg-blue-500' : 'bg-green-500'
+                          user.email === 'admin@kayodefilani.com' ? 'bg-blue-500' : user.role === 'viewer' ? 'bg-green-500' : 'bg-purple-500'
                         }`} />
                       </div>
                       <div className="ml-3">
                         <p className="text-sm font-medium text-black">{user.displayName || 'No name set'}</p>
                         <p className="text-sm text-gray-500">{user.email}</p>
-                        <p className="text-sm text-gray-500 capitalize">{user.role}</p>
+                        <p className={`text-xs font-medium ${
+                          user.email === 'admin@kayodefilani.com' ? 'text-red-600' :
+                          user.role === 'editor' ? 'text-purple-600' :
+                          'text-green-600'
+                        }`}>
+                          Role: {user.email === 'admin@kayodefilani.com' ? 'admin' : (user.role || 'viewer')}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -206,6 +225,13 @@ export default function UserManagement() {
                               >
                                 <FiLock />
                                 Change Password
+                              </button>
+                              <button
+                                onClick={() => setEditingRole(user)}
+                                className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                              >
+                                <FiUser />
+                                Change Role
                               </button>
                               <button
                                 onClick={() => handleDeleteUser(user.uid)}
@@ -327,6 +353,58 @@ export default function UserManagement() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700"
                 >
                   Change Password
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Role Modal */}
+      {editingRole && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-black">Change User Role</h3>
+              <button
+                onClick={() => setEditingRole(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Change role for <span className="font-medium">{editingRole.displayName || editingRole.email}</span>
+              </p>
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={() => handleChangeRole(editingRole, 'viewer')}
+                  className={`p-3 rounded-lg border ${
+                    editingRole.role === 'viewer' 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
+                    <span className="font-medium text-black">Viewer</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Can view files but cannot download</p>
+                </button>
+                <button
+                  onClick={() => handleChangeRole(editingRole, 'editor')}
+                  className={`p-3 rounded-lg border ${
+                    editingRole.role === 'editor' 
+                      ? 'bg-purple-50 border-purple-200' 
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className="h-2 w-2 rounded-full bg-purple-500 mr-2"></div>
+                    <span className="font-medium text-black">Editor</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Can view and download files</p>
                 </button>
               </div>
             </div>

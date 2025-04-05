@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@app/contexts/AuthContext';
-import UserManagement from '@app/components/UserManagement';
-import FileAccessHistory from '@app/components/FileAccessHistory';
-import Navigation from '@app/components/Navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import UserManagement from '@/components/UserManagement';
+import FileAccessHistory from '@/components/FileAccessHistory';
+import Navigation from '@/components/Navigation';
 import { FiUsers, FiClock } from 'react-icons/fi';
 
 export default function Users() {

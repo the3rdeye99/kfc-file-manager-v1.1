@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { filePath } = body;
+    const { filePath, displayName } = body;
 
     if (!filePath) {
       console.error('No file path provided in POST request');
@@ -160,7 +160,23 @@ export async function POST(request: NextRequest) {
 
     // Add to file access history
     try {
-      const username = userEmail.split('@')[0]; // Extract username from email
+      // Get user display name from Firebase Auth
+      let username = userEmail.split('@')[0]; // Default to email username
+      
+      // Use display name from request if provided
+      if (displayName) {
+        username = displayName;
+      } else {
+        try {
+          const userRecord = await getAdminAuth().getUserByEmail(userEmail);
+          if (userRecord && userRecord.displayName) {
+            username = userRecord.displayName;
+          }
+        } catch (userError) {
+          console.error('Error getting user record:', userError);
+          // Continue with default username
+        }
+      }
       
       await addDoc(collection(db, 'fileAccessHistory'), {
         filePath,

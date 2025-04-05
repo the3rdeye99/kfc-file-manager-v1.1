@@ -35,7 +35,7 @@ export async function deleteUser(userId: string) {
   }
 }
 
-export async function signup(email: string, password: string, username: string) {
+export async function signup(email: string, password: string, username: string, role: 'viewer' | 'editor' = 'viewer') {
   try {
     const auth = getAdminAuth();
     
@@ -47,9 +47,9 @@ export async function signup(email: string, password: string, username: string) 
       displayName: username
     });
 
-    // Set custom claims for the user (viewer role)
+    // Set custom claims for the user
     await auth.setCustomUserClaims(userRecord.uid, {
-      role: 'viewer',
+      role: role,
       username: username
     });
 
@@ -94,6 +94,40 @@ export async function updateUser(userId: string, displayName: string) {
   }
 }
 
+export async function updateUserRole(userId: string, role: 'viewer' | 'editor') {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value;
+    
+    if (!sessionCookie) {
+      throw new Error('No session cookie found');
+    }
+
+    const auth = getAdminAuth();
+    
+    // Verify the session cookie and get the user
+    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
+    
+    // Check if the user is an admin
+    if (!decodedClaims.email?.includes('admin')) {
+      throw new Error('Unauthorized: Only admins can update user roles');
+    }
+
+    // Update the user's custom claims
+    await auth.setCustomUserClaims(userId, {
+      role: role
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to update user role' 
+    };
+  }
+}
+
 export async function getCurrentUser() {
   try {
     const cookieStore = cookies();
@@ -106,10 +140,13 @@ export async function getCurrentUser() {
     const auth = getAdminAuth();
     const decodedClaims = await auth.verifySessionCookie(sessionCookie);
     
+    // Get the role from custom claims or default to viewer
+    const role = decodedClaims.role || (decodedClaims.email?.includes('admin') ? 'admin' : 'viewer');
+    
     return {
       uid: decodedClaims.uid,
       email: decodedClaims.email,
-      role: decodedClaims.email?.includes('admin') ? 'admin' : 'viewer',
+      role: role,
       displayName: decodedClaims.displayName || ''
     };
   } catch (error) {

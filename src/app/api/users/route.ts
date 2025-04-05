@@ -6,7 +6,15 @@ export async function GET() {
     const auth = getAdminAuth();
     const users = await auth.listUsers();
     
-    return NextResponse.json(users.users);
+    // Map users to include role from custom claims
+    const usersWithRoles = users.users.map(user => ({
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.customClaims?.role || 'viewer'
+    }));
+    
+    return NextResponse.json(usersWithRoles);
   } catch (error) {
     console.error('Error fetching users:', error);
     return NextResponse.json(

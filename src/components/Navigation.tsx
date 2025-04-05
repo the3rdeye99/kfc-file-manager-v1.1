@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@app/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { FiUsers, FiLogOut } from 'react-icons/fi';
+import { FiUsers, FiLogOut, FiTrash2 } from 'react-icons/fi';
 
 export default function Navigation() {
   const { user, logout } = useAuth();
@@ -58,6 +58,13 @@ export default function Navigation() {
                     </Link>
                   </>
                 )}
+                <Link
+                  href="/trash"
+                  className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                >
+                  <FiTrash2 />
+                  Trash
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="text-red-600 hover:text-red-700 flex items-center gap-1"

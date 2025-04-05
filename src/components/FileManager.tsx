@@ -5,7 +5,7 @@ import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, Uploa
 import { storage, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload } from 'react-icons/fi';
+import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload, FiCheckSquare, FiSquare } from 'react-icons/fi';
 import Image from 'next/image';
 import { collection, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -22,11 +22,21 @@ interface FileItem {
 }
 
 // Helper function to check user permissions
-const getUserPermissions = (email: string | null | undefined) => {
-  if (!email) return { isAdmin: false };
-  return {
-    isAdmin: email === 'admin@kayodefilani.com',
-  };
+const getUserPermissions = (email: string | null | undefined, role?: string) => {
+  if (!email) return { isAdmin: false, canDownload: false };
+  
+  // Admin has all permissions
+  if (email === 'admin@kayodefilani.com') {
+    return { isAdmin: true, canDownload: true };
+  }
+  
+  // Check role-based permissions
+  if (role === 'editor') {
+    return { isAdmin: false, canDownload: true };
+  }
+  
+  // Default to viewer permissions
+  return { isAdmin: false, canDownload: false };
 };
 
 const formatBytes = (bytes: number): string => {
@@ -107,7 +117,7 @@ export default function FileManager() {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const { user } = useAuth();
-  const { isAdmin } = getUserPermissions(user?.email);
+  const [userRole, setUserRole] = useState<string>('viewer');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -127,6 +137,8 @@ export default function FileManager() {
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showNewSubFolderModal, setShowNewSubFolderModal] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -517,23 +529,43 @@ export default function FileManager() {
   const handleDelete = async (filePath: string) => {
     if (!isAdmin) return;
     
-    if (!confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to move this file to the trash bin? You can restore it within 30 days.')) {
       return;
     }
     
     try {
       // Ensure we're within the 'files/' directory
       const safeFilePath = filePath.startsWith('files/') ? filePath : `files/${filePath}`;
+      
+      // Move to trash bin
+      const response = await fetch('/api/trash', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filePath: safeFilePath,
+          fileType: 'file',
+          fileName: safeFilePath.split('/').pop()
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to move file to trash bin');
+      }
+      
+      // Delete from storage
       const fileRef = ref(storage, safeFilePath);
       await retryOperation(() => deleteObject(fileRef));
-      toast.success('File deleted successfully');
+      
+      toast.success('File moved to trash bin');
       loadFiles();
       
       // Dispatch event to notify StorageDashboard
       window.dispatchEvent(new Event('fileDeleted'));
     } catch (error) {
-      console.error('Error deleting file:', error);
-      toast.error('Failed to delete file');
+      console.error('Error moving file to trash bin:', error);
+      toast.error('Failed to move file to trash bin');
     }
   };
 
@@ -549,7 +581,10 @@ export default function FileManager() {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ filePath: file.path }),
+            body: JSON.stringify({ 
+              filePath: file.path,
+              displayName: user?.displayName || null
+            }),
           });
           
           if (!response.ok) {
@@ -909,7 +944,10 @@ export default function FileManager() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ filePath: parentPath || 'files' }),
+          body: JSON.stringify({ 
+            filePath: parentPath || 'files',
+            displayName: user?.displayName || null
+          }),
         });
         
         if (!response.ok) {
@@ -979,7 +1017,7 @@ export default function FileManager() {
   const handleDeleteFolder = async (folderPath: string) => {
     if (!isAdmin) return;
     
-    if (!confirm('Are you sure you want to delete this folder and all its contents?')) {
+    if (!confirm('Are you sure you want to move this folder and all its contents to the trash bin? You can restore it within 30 days.')) {
       return;
     }
 
@@ -991,31 +1029,58 @@ export default function FileManager() {
       const folderRef = ref(storage, safeFolderPath);
       const result = await listAll(folderRef);
       
-      // Delete all files in the folder
-      const deletePromises = result.items.map(item => deleteObject(item));
-      await Promise.all(deletePromises);
+      // Move all files to trash bin
+      const moveToTrashPromises = result.items.map(async (item) => {
+        const response = await fetch('/api/trash', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filePath: item.fullPath,
+            fileType: 'file',
+            fileName: item.fullPath.split('/').pop()
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to move ${item.fullPath} to trash bin`);
+        }
+        
+        return deleteObject(item);
+      });
       
-      // Delete all subfolders recursively
-      const deleteFolderPromises = result.prefixes.map(prefix => handleDeleteFolder(prefix.fullPath));
-      await Promise.all(deleteFolderPromises);
+      await Promise.all(moveToTrashPromises);
       
-      // Finally delete the folder itself (the placeholder file)
-      const placeholderPath = `${safeFolderPath}/.placeholder`;
-      const placeholderRef = ref(storage, placeholderPath);
-      try {
-        await deleteObject(placeholderRef);
-      } catch {
-        console.log('No placeholder file found, continuing...');
+      // Move all subfolders to trash bin recursively
+      const moveFolderPromises = result.prefixes.map(prefix => handleDeleteFolder(prefix.fullPath));
+      await Promise.all(moveFolderPromises);
+      
+      // Move the folder itself to trash bin
+      const response = await fetch('/api/trash', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filePath: safeFolderPath,
+          fileType: 'folder',
+          fileName: safeFolderPath.split('/').pop()
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to move folder ${safeFolderPath} to trash bin`);
       }
       
-      toast.success('Folder deleted successfully');
+      toast.success('Folder moved to trash bin');
       loadFiles();
       
       // Dispatch event to notify StorageDashboard
       window.dispatchEvent(new Event('folderDeleted'));
     } catch (error) {
-      console.error('Error deleting folder:', error);
-      toast.error('Failed to delete folder');
+      console.error('Error moving folder to trash bin:', error);
+      toast.error('Failed to move folder to trash bin');
     }
   };
 
@@ -1028,9 +1093,12 @@ export default function FileManager() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ filePath: folder.path }),
+          body: JSON.stringify({ 
+            filePath: folder.path,
+            displayName: user?.displayName || null
+          }),
         });
-        
+
         if (!response.ok) {
           console.error('Failed to record folder access history:', await response.text());
         }
@@ -1073,6 +1141,77 @@ export default function FileManager() {
       setSearchResults(results);
     }
   };
+
+  const toggleSelectItem = (itemPath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedItems(prev => {
+      if (prev.includes(itemPath)) {
+        return prev.filter(path => path !== itemPath);
+      } else {
+        return [...prev, itemPath];
+      }
+    });
+  };
+
+  const toggleMultiSelectMode = () => {
+    setIsMultiSelectMode(!isMultiSelectMode);
+    if (isMultiSelectMode) {
+      setSelectedItems([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+    
+    if (!isAdmin) return;
+    
+    if (!confirm(`Are you sure you want to move ${selectedItems.length} item(s) to the trash bin? You can restore them within 30 days.`)) {
+      return;
+    }
+
+    try {
+      const deletePromises = selectedItems.map(async (itemPath) => {
+        const item = filteredItems.find(i => i.path === itemPath);
+        if (!item) return;
+        
+        if (item.type === 'folder') {
+          await handleDeleteFolder(item.path);
+        } else {
+          await handleDelete(item.path);
+        }
+      });
+      
+      await Promise.all(deletePromises);
+      setSelectedItems([]);
+      setIsMultiSelectMode(false);
+      toast.success(`${selectedItems.length} item(s) moved to trash bin`);
+    } catch (error) {
+      console.error('Error deleting multiple items:', error);
+      toast.error('Failed to delete some items');
+    }
+  };
+
+  // Fetch user role on component mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/users/current');
+        if (response.ok) {
+          const userData = await response.json();
+          setUserRole(userData.role || 'viewer');
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+
+    if (user) {
+      fetchUserRole();
+    }
+  }, [user]);
+
+  // Get user permissions
+  const { isAdmin, canDownload } = getUserPermissions(user?.email, userRole);
 
   return (
     <div className="w-full">
@@ -1140,8 +1279,30 @@ export default function FileManager() {
               <FiList className="w-5 h-5" />
               </button>
             </div>
-          {isAdmin && (
+              {isAdmin && (
             <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-black">Select multiple</span>
+                <button
+                  onClick={toggleMultiSelectMode}
+                  className={`p-2 ${isMultiSelectMode ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-100'} rounded-lg`}
+                  title={isMultiSelectMode ? "Exit multi-select mode" : "Select multiple files"}
+                >
+                  {isMultiSelectMode ? <FiCheckSquare className="w-5 h-5" /> : <FiSquare className="w-5 h-5" />}
+                </button>
+              </div>
+              {isMultiSelectMode && selectedItems.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-black">Delete selected</span>
+                  <button
+                    onClick={handleBulkDelete}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    title={`Delete ${selectedItems.length} selected item(s)`}
+                  >
+                    <FiTrash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => setShowNewFolderInput(true)}
                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
@@ -1160,9 +1321,9 @@ export default function FileManager() {
                   disabled={uploading}
                 />
               </label>
-          </div>
+            </div>
           )}
-        </div>
+          </div>
         <div className="relative mb-4">
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
@@ -1192,10 +1353,25 @@ export default function FileManager() {
                   viewMode === 'grid'
                     ? 'p-4 border rounded-lg hover:bg-gray-50 cursor-pointer relative'
                     : 'p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex items-center justify-between'
-                }`}
-                onClick={() => handleFileClick(item)}
+                } ${selectedItems.includes(item.path) ? 'bg-blue-50 border-blue-200' : ''}`}
+                onClick={(e) => isMultiSelectMode ? toggleSelectItem(item.path, e) : handleFileClick(item)}
               >
                 <div className={`flex ${viewMode === 'list' ? 'items-center gap-3' : 'flex-col items-center'}`}>
+                  {isMultiSelectMode && (
+                    <div 
+                      className={`mr-2 ${viewMode === 'grid' ? 'absolute top-2 left-2' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        toggleSelectItem(item.path, e);
+                      }}
+                    >
+                      {selectedItems.includes(item.path) ? (
+                        <FiCheckSquare className="w-5 h-5 text-blue-500" />
+                      ) : (
+                        <FiSquare className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
+                  )}
                   {item.type === 'folder' ? (
                     <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} text-blue-500`} />
                   ) : (
@@ -1236,52 +1412,59 @@ export default function FileManager() {
                     )}
                   </div>
                 </div>
-                        {isAdmin && (
-                  <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
-                    {item.type === 'file' && (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-green-500 hover:text-green-700"
-                        title="Download file"
-                      >
-                        <FiDownload className="w-5 h-5" />
-                      </a>
-                    )}
-                    {/* Show rename button only for files in root */}
-                    {item.type === 'file' && !item.parentFolder && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingItem(item);
-                          setNewName(item.name);
-                          setShowRenameModal(true);
-                        }}
-                        className="text-blue-500 hover:text-blue-700"
-                        title="Rename"
-                      >
-                        <FiEdit2 className="w-5 h-5" />
-                      </button>
-                    )}
+                        {/* File actions */}
+                        {!isMultiSelectMode && (
+                          <div className={`flex items-center gap-2 ${viewMode === 'grid' ? 'absolute top-2 right-2' : ''}`}>
+                            {/* Show download button for admin and editor roles */}
+                            {(isAdmin || canDownload) && item.type === 'file' && (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-green-500 hover:text-green-700"
+                                title="Download file"
+                              >
+                                <FiDownload className="w-5 h-5" />
+                              </a>
+                            )}
+                            {/* Show rename and delete buttons only for admin */}
+                      {isAdmin && (
+                              <>
+                                {/* Show rename button only for files in root */}
+                                {item.type === 'file' && !item.parentFolder && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                        if (item.type === 'folder') {
-                            handleDeleteFolder(item.path);
-                        } else {
-                          handleDelete(item.path);
-                        }
+                                      setEditingItem(item);
+                                      setNewName(item.name);
+                                      setShowRenameModal(true);
                           }}
-                      className="text-red-500 hover:text-red-700"
-                      title="Delete"
+                                    className="text-blue-500 hover:text-blue-700"
+                                    title="Rename"
                         >
-                      <FiTrash2 className="w-5 h-5" />
+                                    <FiEdit2 className="w-5 h-5" />
                         </button>
-                  </div>
                       )}
-                    </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                                    if (item.type === 'folder') {
+                                      handleDeleteFolder(item.path);
+                                    } else {
+                              handleDelete(item.path);
+                                    }
+                            }}
+                                  className="text-red-500 hover:text-red-700"
+                            title="Delete"
+                          >
+                                  <FiTrash2 className="w-5 h-5" />
+                          </button>
+                              </>
+                        )}
+                      </div>
+                  )}
+                </div>
             ))
           ) : (
               <p className="text-center text-gray-500 py-4 col-span-full">
@@ -1307,7 +1490,7 @@ export default function FileManager() {
               >
                 <FiX className="w-5 h-5" />
                           </button>
-                      </div>
+      </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Folder Name</label>
               <input
@@ -1479,6 +1662,12 @@ export default function FileManager() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {isMultiSelectMode && (
+        <div className="mt-2 mb-2 text-sm text-black">
+          {selectedItems.length} item(s) selected
         </div>
       )}
     </div>
