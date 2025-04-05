@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signup } from '@/app/actions/userActions';
 import toast from 'react-hot-toast';
@@ -15,11 +15,26 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
-  // Redirect if not admin
-  if (!user?.email?.includes('admin')) {
-    router.push('/');
+  // Redirect if not admin or if auth is still loading
+  useEffect(() => {
+    if (!authLoading && (!user || !user.email?.includes('admin'))) {
+      router.push('/');
+    }
+  }, [user, authLoading, router]);
+
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not admin
+  if (!user || !user.email?.includes('admin')) {
     return null;
   }
 
@@ -98,7 +113,7 @@ export default function SignupPage() {
               <input
                 id="password"
                 name="password"
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
@@ -135,7 +150,6 @@ export default function SignupPage() {
               </select>
             </div>
           </div>
-
           <div>
             <button
               type="submit"
