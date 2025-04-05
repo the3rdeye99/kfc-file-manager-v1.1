@@ -1,24 +1,24 @@
 import { NextResponse } from 'next/server';
-import { getAdminAuth } from '../../../../lib/firebase-admin-server';
 import { cookies } from 'next/headers';
+import { getAdminAuth } from '@/lib/firebase-admin-server';
 
 export async function GET() {
   try {
-    const sessionCookie = cookies().get('session')?.value;
-    
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value;
+
     if (!sessionCookie) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const auth = getAdminAuth();
-    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
-    const user = await auth.getUser(decodedClaims.uid);
+    const decodedClaims = await getAdminAuth().verifySessionCookie(sessionCookie, true);
+    const userRecord = await getAdminAuth().getUser(decodedClaims.uid);
 
     return NextResponse.json({
-      uid: user.uid,
-      email: user.email,
-      role: user.customClaims?.role || 'viewer',
-      displayName: user.displayName
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName,
+      role: decodedClaims.role || 'viewer'
     });
   } catch (error) {
     console.error('Error getting current user:', error);

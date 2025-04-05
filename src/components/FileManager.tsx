@@ -529,7 +529,7 @@ export default function FileManager() {
   const handleDelete = async (filePath: string) => {
     if (!isAdmin) return;
     
-    if (!confirm('Are you sure you want to move this file to the trash bin? You can restore it within 30 days.')) {
+    if (!confirm('Are you sure you want to delete this file? This action cannot be undone and the file cannot be restored.')) {
       return;
     }
     
@@ -1017,7 +1017,7 @@ export default function FileManager() {
   const handleDeleteFolder = async (folderPath: string) => {
     if (!isAdmin) return;
     
-    if (!confirm('Are you sure you want to move this folder and all its contents to the trash bin? You can restore it within 30 days.')) {
+    if (!confirm('Are you sure you want to delete this folder and all its contents? This action cannot be undone and the files cannot be restored.')) {
       return;
     }
 
@@ -1165,7 +1165,7 @@ export default function FileManager() {
     
     if (!isAdmin) return;
     
-    if (!confirm(`Are you sure you want to move ${selectedItems.length} item(s) to the trash bin? You can restore them within 30 days.`)) {
+    if (!confirm(`Are you sure you want to delete ${selectedItems.length} item(s)? This action cannot be undone and the files cannot be restored.`)) {
       return;
     }
 
