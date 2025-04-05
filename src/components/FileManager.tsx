@@ -577,10 +577,10 @@ export default function FileManager() {
         // Record file access
         try {
           const response = await fetch('/api/file-access-history', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
             body: JSON.stringify({ 
               filePath: file.path,
               displayName: user?.displayName || null
@@ -940,10 +940,10 @@ export default function FileManager() {
       // Record folder access
       try {
         const response = await fetch('/api/file-access-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
           body: JSON.stringify({ 
             filePath: parentPath || 'files',
             displayName: user?.displayName || null
@@ -1089,10 +1089,10 @@ export default function FileManager() {
       // Record folder access
       try {
         const response = await fetch('/api/file-access-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
           body: JSON.stringify({ 
             filePath: folder.path,
             displayName: user?.displayName || null
