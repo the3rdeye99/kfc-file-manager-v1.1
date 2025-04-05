@@ -47,15 +47,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
-    // Add beforeunload event listener for tab closing
+    // Add beforeunload event listener for automatic sign-out
     const handleBeforeUnload = async () => {
-      if (process.env.NODE_ENV === 'production') {
-        try {
-          await signOut(auth);
-          await fetch('/api/auth/session', { method: 'DELETE' });
-        } catch (error) {
-          console.error('Error during automatic sign-out:', error);
-        }
+      try {
+        await signOut(auth);
+        await fetch('/api/auth/session', { method: 'DELETE' });
+      } catch (error) {
+        console.error('Error during automatic sign-out:', error);
       }
     };
 
