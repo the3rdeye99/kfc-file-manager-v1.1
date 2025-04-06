@@ -139,6 +139,7 @@ export default function FileManager() {
   const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -391,14 +392,17 @@ export default function FileManager() {
     if (!files || files.length === 0) return;
     
     try {
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadSpeed(0);
-    setTimeRemaining(0);
+      setUploading(true);
+      setUploadProgress(0);
+      setUploadSpeed(0);
+      setTimeRemaining(0);
       setTotalSize(0);
-    lastUploadedBytes.current = 0;
-    lastUpdateTime.current = Date.now();
-    
+      lastUploadedBytes.current = 0;
+      lastUpdateTime.current = Date.now();
+      
+      const uploadTasksArray: UploadTask[] = [];
+      setUploadTasks(uploadTasksArray);
+      
       const uploadPromises = Array.from(files).map(async (file) => {
         try {
           // Sanitize the filename to prevent path traversal but preserve spaces
@@ -406,7 +410,7 @@ export default function FileManager() {
           
           // Always ensure we're within the 'files/' directory
           const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
-    const fileRef = ref(storage, filePath);
+          const fileRef = ref(storage, filePath);
 
           // Get the current folder's category
           let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
@@ -427,32 +431,35 @@ export default function FileManager() {
             }
           });
           
+          // Add the upload task to the array
+          uploadTasksArray.push(uploadTask);
+          
           return new Promise((resolve, reject) => {
-      uploadTask.on('state_changed',
+            uploadTask.on('state_changed',
               (snapshot) => {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                 setUploadProgress(progress);
                 
                 // Calculate upload speed
-          const now = Date.now();
-          const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
+                const now = Date.now();
+                const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
                 if (timeDiff > 0) {
-          const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
+                  const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
                   const speed = bytesDiff / timeDiff; // bytes per second
-          setUploadSpeed(speed);
-          
-          // Calculate time remaining
-          const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
-          const remainingTime = remainingBytes / speed;
-          setTimeRemaining(remainingTime);
+                  setUploadSpeed(speed);
+                  
+                  // Calculate time remaining
+                  const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
+                  const remainingTime = remainingBytes / speed;
+                  setTimeRemaining(remainingTime);
                 }
-          
-          lastUploadedBytes.current = snapshot.bytesTransferred;
-          lastUpdateTime.current = now;
+                
+                lastUploadedBytes.current = snapshot.bytesTransferred;
+                lastUpdateTime.current = now;
                 setTotalSize(snapshot.totalBytes);
-        },
+              },
               async (error) => {
-          console.error('Error uploading file:', error);
+                console.error('Error uploading file:', error);
                 if (error.code === 'storage/retry-limit-exceeded') {
                   try {
                     // Try to resume the upload
@@ -469,8 +476,8 @@ export default function FileManager() {
                   toast.error(`Failed to upload ${file.name}`);
                   reject(error);
                 }
-        },
-        async () => {
+              },
+              async () => {
                 try {
                   const url = await retryOperation(() => getDownloadURL(fileRef));
                   const metadata = await retryOperation(() => getMetadata(fileRef));
@@ -493,8 +500,8 @@ export default function FileManager() {
               }
             );
           });
-    } catch (error) {
-      console.error('Error uploading file:', error);
+        } catch (error) {
+          console.error('Error uploading file:', error);
           toast.error(`Failed to upload ${file.name}`);
           return null;
         }
@@ -519,6 +526,7 @@ export default function FileManager() {
       setUploadSpeed(0);
       setTimeRemaining(0);
       setTotalSize(0);
+      setUploadTasks([]);
       // Reset the file input
       if (e.target) {
         e.target.value = '';
@@ -1294,6 +1302,27 @@ export default function FileManager() {
   // Get user permissions
   const { isAdmin, canDownload } = getUserPermissions(user?.email, userRole);
 
+  const handleCancelUpload = () => {
+    if (uploadTasks.length > 0) {
+      // Cancel all upload tasks
+      uploadTasks.forEach(task => {
+        task.cancel();
+      });
+      
+      // Clear the upload tasks array
+      setUploadTasks([]);
+      
+      // Reset upload state
+      setUploading(false);
+      setUploadProgress(0);
+      setUploadSpeed(0);
+      setTimeRemaining(0);
+      setTotalSize(0);
+      
+      toast.info('Upload cancelled');
+    }
+  };
+
   return (
     <div className="w-full">
       <div className="bg-white rounded-lg shadow-md p-4">
@@ -1680,7 +1709,16 @@ export default function FileManager() {
         <div className="fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-lg w-80">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-700">Uploading...</span>
-            <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
+              <button 
+                onClick={handleCancelUpload}
+                className="text-red-500 hover:text-red-700"
+                title="Cancel upload"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
             <div
