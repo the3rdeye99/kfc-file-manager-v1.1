@@ -48,50 +48,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
 
     // Set up a heartbeat to check session validity
-    const heartbeatInterval = setInterval(checkSession, 30000); // Check every 30 seconds
+    const heartbeatInterval = setInterval(checkSession, 60000); // Check every minute
 
-    // Track tab visibility
-    let tabClosed = false;
-    
-    // Function to handle visibility change
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // When tab becomes hidden, mark it as potentially closed
-        tabClosed = true;
-      } else if (tabClosed) {
-        // If tab was previously marked as closed and is now visible again,
-        // it means the user reopened the tab, so sign them out
-        signOut(auth).catch(error => {
-          console.error('Error during automatic sign-out:', error);
-        });
-        
-        // Also clear the session cookie
-        fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
-          console.error('Error clearing session cookie:', error);
-        });
-        
-        setUser(null);
-        tabClosed = false;
-      }
-    };
-    
-    // Add visibility change event listener
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Add beforeunload event listener for more reliable detection
-    const handleBeforeUnload = () => {
-      // Use sendBeacon for more reliable sending during page unload
+    // Function to clear session when tab is closed
+    const clearSessionOnTabClose = () => {
+      // Use sendBeacon for more reliable delivery during page unload
       if (navigator.sendBeacon) {
         navigator.sendBeacon('/api/auth/session', '');
       } else {
         // Fallback for browsers that don't support sendBeacon
         const xhr = new XMLHttpRequest();
-        xhr.open('DELETE', '/api/auth/session', false);
+        xhr.open('DELETE', '/api/auth/session', false); // false makes it synchronous
         xhr.send();
       }
     };
+
+    // Add multiple event listeners to catch tab close in different browsers
+    window.addEventListener('beforeunload', clearSessionOnTabClose);
+    window.addEventListener('unload', clearSessionOnTabClose);
+    window.addEventListener('pagehide', clearSessionOnTabClose);
     
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Also use the Page Visibility API as a backup
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // When tab becomes hidden, start a timer
+        const hiddenTime = Date.now();
+        
+        // When tab becomes visible again, check if it was hidden for more than 5 seconds
+        const handleVisibilityChangeBack = () => {
+          const visibleTime = Date.now();
+          const timeHidden = visibleTime - hiddenTime;
+          
+          // If tab was hidden for more than 5 seconds, consider it a tab close/reopen
+          if (timeHidden > 5000) {
+            // Clear the session cookie
+            fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
+              console.error('Error clearing session cookie:', error);
+            });
+          }
+          
+          // Remove the event listener
+          document.removeEventListener('visibilitychange', handleVisibilityChangeBack);
+        };
+        
+        // Add event listener for when tab becomes visible again
+        document.addEventListener('visibilitychange', handleVisibilityChangeBack);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -127,8 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribe();
       clearInterval(heartbeatInterval);
+      window.removeEventListener('beforeunload', clearSessionOnTabClose);
+      window.removeEventListener('unload', clearSessionOnTabClose);
+      window.removeEventListener('pagehide', clearSessionOnTabClose);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
 
