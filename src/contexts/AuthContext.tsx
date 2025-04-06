@@ -48,41 +48,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
 
     // Set up a heartbeat to check session validity
-    const heartbeatInterval = setInterval(checkSession, 60000); // Check every minute
+    const heartbeatInterval = setInterval(checkSession, 30000); // Check every 30 seconds
 
-    // Add visibility change event listener
+    // Track tab visibility and inactivity
+    let inactivityTimer: NodeJS.Timeout | null = null;
+    let lastActivityTime = Date.now();
+    const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+
+    // Function to reset the inactivity timer
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+      }
+      
+      inactivityTimer = setTimeout(async () => {
+        // If we've been inactive for 60 seconds, sign out
+        await signOut(auth);
+        await fetch('/api/auth/session', { method: 'DELETE' });
+        setUser(null);
+      }, INACTIVITY_TIMEOUT);
+      
+      lastActivityTime = Date.now();
+    };
+
+    // Function to handle visibility change
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // When tab becomes hidden, start a timer
-        const hiddenTime = Date.now();
-        
-        // When tab becomes visible again, check if it was hidden for more than 5 seconds
-        const handleVisibilityChangeBack = () => {
-          const visibleTime = Date.now();
-          const timeHidden = visibleTime - hiddenTime;
+        // When tab becomes hidden, start the inactivity timer
+        resetInactivityTimer();
+      } else {
+        // When tab becomes visible again, check if it was hidden for more than 60 seconds
+        const timeHidden = Date.now() - lastActivityTime;
+        if (timeHidden > INACTIVITY_TIMEOUT) {
+          // If hidden for more than 60 seconds, sign out
+          signOut(auth).catch(error => {
+            console.error('Error during automatic sign-out:', error);
+          });
           
-          // If tab was hidden for more than 5 seconds, consider it a tab close/reopen
-          if (timeHidden > 5000) {
-            signOut(auth).catch(error => {
-              console.error('Error during automatic sign-out:', error);
-            });
-            
-            // Also clear the session cookie
-            fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
-              console.error('Error clearing session cookie:', error);
-            });
-          }
+          // Also clear the session cookie
+          fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
+            console.error('Error clearing session cookie:', error);
+          });
           
-          // Remove the event listener
-          document.removeEventListener('visibilitychange', handleVisibilityChangeBack);
-        };
-        
-        // Add event listener for when tab becomes visible again
-        document.addEventListener('visibilitychange', handleVisibilityChangeBack);
+          setUser(null);
+        } else {
+          // If not hidden for too long, reset the timer
+          resetInactivityTimer();
+        }
       }
     };
     
+    // Add visibility change event listener
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Add event listeners for user activity
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => {
+      document.addEventListener(event, resetInactivityTimer);
+    });
+    
+    // Initialize the inactivity timer
+    resetInactivityTimer();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -118,7 +144,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribe();
       clearInterval(heartbeatInterval);
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, resetInactivityTimer);
+      });
     };
   }, []);
 

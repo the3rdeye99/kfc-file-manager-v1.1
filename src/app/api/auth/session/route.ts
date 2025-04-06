@@ -7,8 +7,8 @@ export async function POST(request: Request) {
   try {
     const { idToken } = await request.json();
     
-    // Create a session cookie with a shorter expiration time
-    const expiresIn = 60 * 60 * 1000; // 1 hour instead of 5 days
+    // Create a session cookie with a very short expiration time
+    const expiresIn = 60 * 1000; // 1 minute
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
     
     // Set the cookie
