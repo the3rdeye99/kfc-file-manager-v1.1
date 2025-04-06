@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit as firestoreLimit, startAfter, getDocs, addDoc, getCountFromServer, where, getFirestore, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { getAdminAuth } from '@/lib/firebase-admin-server';
+import { getAdminAuth, getAdminStorage, deleteFileFromStorage } from '@/lib/firebase-admin-server';
 import { ref, deleteObject, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 
@@ -34,6 +34,16 @@ export async function GET(request: NextRequest) {
         }, { status: 401 });
       }
       userEmail = decodedClaims.email;
+
+      // Only allow admin users to access trash
+      if (userEmail !== 'admin@kayodefilani.com') {
+        console.error('Non-admin user attempted to access trash');
+        return NextResponse.json({ 
+          error: 'Unauthorized', 
+          message: 'Only administrators can access the trash bin',
+          code: 'NON_ADMIN_USER'
+        }, { status: 403 });
+      }
     } catch (error) {
       console.error('Error verifying session cookie:', error);
       return NextResponse.json({ 
@@ -140,6 +150,16 @@ export async function POST(request: NextRequest) {
         }, { status: 401 });
       }
       userEmail = decodedClaims.email;
+
+      // Only allow admin users to access trash
+      if (userEmail !== 'admin@kayodefilani.com') {
+        console.error('Non-admin user attempted to access trash');
+        return NextResponse.json({ 
+          error: 'Unauthorized', 
+          message: 'Only administrators can access the trash bin',
+          code: 'NON_ADMIN_USER'
+        }, { status: 403 });
+      }
     } catch (error) {
       console.error('Error verifying session cookie in POST request:', error);
       return NextResponse.json({ 
@@ -298,6 +318,16 @@ export async function DELETE(request: NextRequest) {
           code: 'NO_EMAIL_IN_CLAIMS'
         }, { status: 401 });
       }
+      
+      // Check if user is admin
+      if (!decodedClaims.email.includes('admin')) {
+        console.error('Non-admin user attempted to delete from trash');
+        return NextResponse.json({ 
+          error: 'Unauthorized', 
+          message: 'Only admin users can delete from trash',
+          code: 'NON_ADMIN_USER'
+        }, { status: 403 });
+      }
     } catch (error) {
       console.error('Error verifying session cookie in DELETE request:', error);
       return NextResponse.json({ 
@@ -334,14 +364,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     const trashItem = trashDoc.docs[0].data();
+    let hasStorageError = false;
 
-    // Delete the file from storage
+    // Delete the file from storage using the helper function
     try {
-      const fileRef = ref(storage, trashItem.filePath);
-      await deleteObject(fileRef);
-      console.log(`Deleted file ${trashItem.filePath} from storage`);
+      await deleteFileFromStorage(trashItem.filePath);
     } catch (deleteError) {
       console.error('Error deleting file from storage:', deleteError);
+      hasStorageError = true;
       // Continue with deleting from Firestore even if storage deletion fails
     }
 
@@ -359,7 +389,10 @@ export async function DELETE(request: NextRequest) {
       }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      warning: hasStorageError ? 'File could not be deleted from storage' : undefined
+    });
   } catch (error) {
     console.error('Error deleting item from trash:', error);
     return NextResponse.json({ 

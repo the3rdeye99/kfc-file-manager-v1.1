@@ -392,14 +392,14 @@ export default function FileManager() {
     if (!files || files.length === 0) return;
     
     try {
-      setUploading(true);
-      setUploadProgress(0);
-      setUploadSpeed(0);
-      setTimeRemaining(0);
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadSpeed(0);
+    setTimeRemaining(0);
       setTotalSize(0);
-      lastUploadedBytes.current = 0;
-      lastUpdateTime.current = Date.now();
-      
+    lastUploadedBytes.current = 0;
+    lastUpdateTime.current = Date.now();
+    
       const uploadTasksArray: UploadTask[] = [];
       setUploadTasks(uploadTasksArray);
       
@@ -410,7 +410,7 @@ export default function FileManager() {
           
           // Always ensure we're within the 'files/' directory
           const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
-          const fileRef = ref(storage, filePath);
+    const fileRef = ref(storage, filePath);
 
           // Get the current folder's category
           let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
@@ -435,31 +435,31 @@ export default function FileManager() {
           uploadTasksArray.push(uploadTask);
           
           return new Promise((resolve, reject) => {
-            uploadTask.on('state_changed',
+      uploadTask.on('state_changed',
               (snapshot) => {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                 setUploadProgress(progress);
                 
                 // Calculate upload speed
-                const now = Date.now();
-                const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
+          const now = Date.now();
+          const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
                 if (timeDiff > 0) {
-                  const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
+          const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
                   const speed = bytesDiff / timeDiff; // bytes per second
-                  setUploadSpeed(speed);
-                  
-                  // Calculate time remaining
-                  const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
-                  const remainingTime = remainingBytes / speed;
-                  setTimeRemaining(remainingTime);
+          setUploadSpeed(speed);
+          
+          // Calculate time remaining
+          const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
+          const remainingTime = remainingBytes / speed;
+          setTimeRemaining(remainingTime);
                 }
-                
-                lastUploadedBytes.current = snapshot.bytesTransferred;
-                lastUpdateTime.current = now;
+          
+          lastUploadedBytes.current = snapshot.bytesTransferred;
+          lastUpdateTime.current = now;
                 setTotalSize(snapshot.totalBytes);
-              },
+        },
               async (error) => {
-                console.error('Error uploading file:', error);
+          console.error('Error uploading file:', error);
                 if (error.code === 'storage/retry-limit-exceeded') {
                   try {
                     // Try to resume the upload
@@ -476,8 +476,8 @@ export default function FileManager() {
                   toast.error(`Failed to upload ${file.name}`);
                   reject(error);
                 }
-              },
-              async () => {
+        },
+        async () => {
                 try {
                   const url = await retryOperation(() => getDownloadURL(fileRef));
                   const metadata = await retryOperation(() => getMetadata(fileRef));
@@ -500,8 +500,8 @@ export default function FileManager() {
               }
             );
           });
-        } catch (error) {
-          console.error('Error uploading file:', error);
+    } catch (error) {
+      console.error('Error uploading file:', error);
           toast.error(`Failed to upload ${file.name}`);
           return null;
         }
@@ -1319,7 +1319,12 @@ export default function FileManager() {
       setTimeRemaining(0);
       setTotalSize(0);
       
-      toast.info('Upload cancelled');
+      toast('Upload cancelled', {
+        style: {
+          background: '#4B5563',
+          color: '#fff'
+        }
+      });
     }
   };
 
@@ -1710,7 +1715,7 @@ export default function FileManager() {
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-700">Uploading...</span>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
+            <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
               <button 
                 onClick={handleCancelUpload}
                 className="text-red-500 hover:text-red-700"

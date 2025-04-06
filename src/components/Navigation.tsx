@@ -56,15 +56,15 @@ export default function Navigation() {
                       <FiUsers />
                       Manage Users
                     </Link>
+                    <Link
+                      href="/trash"
+                      className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <FiTrash2 />
+                      Trash
+                    </Link>
                   </>
                 )}
-                <Link
-                  href="/trash"
-                  className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                >
-                  <FiTrash2 />
-                  Trash
-                </Link>
                 <button
                   onClick={handleLogout}
                   className="text-red-600 hover:text-red-700 flex items-center gap-1"
