@@ -47,22 +47,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
-    // Add beforeunload event listener for automatic sign-out
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      // Use synchronous XMLHttpRequest for more reliable execution during page unload
-      const xhr = new XMLHttpRequest();
-      xhr.open('DELETE', '/api/auth/session', false); // false makes it synchronous
-      xhr.send();
-      
-      // Sign out from Firebase
-      signOut(auth).catch(error => {
-        console.error('Error during automatic sign-out:', error);
-      });
-    };
+    // Set up a heartbeat to check session validity
+    const heartbeatInterval = setInterval(checkSession, 60000); // Check every minute
 
-    // Add both beforeunload and unload event listeners for better coverage
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('unload', handleBeforeUnload);
+    // Add visibility change event listener
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // When tab becomes hidden, start a timer
+        const hiddenTime = Date.now();
+        
+        // When tab becomes visible again, check if it was hidden for more than 5 seconds
+        const handleVisibilityChangeBack = () => {
+          const visibleTime = Date.now();
+          const timeHidden = visibleTime - hiddenTime;
+          
+          // If tab was hidden for more than 5 seconds, consider it a tab close/reopen
+          if (timeHidden > 5000) {
+            signOut(auth).catch(error => {
+              console.error('Error during automatic sign-out:', error);
+            });
+            
+            // Also clear the session cookie
+            fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
+              console.error('Error clearing session cookie:', error);
+            });
+          }
+          
+          // Remove the event listener
+          document.removeEventListener('visibilitychange', handleVisibilityChangeBack);
+        };
+        
+        // Add event listener for when tab becomes visible again
+        document.addEventListener('visibilitychange', handleVisibilityChangeBack);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -97,8 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('unload', handleBeforeUnload);
+      clearInterval(heartbeatInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

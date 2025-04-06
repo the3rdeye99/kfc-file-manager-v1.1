@@ -7,8 +7,8 @@ export async function POST(request: Request) {
   try {
     const { idToken } = await request.json();
     
-    // Create a session cookie
-    const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
+    // Create a session cookie with a shorter expiration time
+    const expiresIn = 60 * 60 * 1000; // 1 hour instead of 5 days
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
     
     // Set the cookie
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
+      sameSite: 'strict', // Add sameSite attribute for better security
     });
 
     return response;
@@ -40,6 +41,7 @@ export async function DELETE() {
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       expires: new Date(0), // Set expiration to the past
+      sameSite: 'strict', // Add sameSite attribute for better security
     });
     
     return response;
