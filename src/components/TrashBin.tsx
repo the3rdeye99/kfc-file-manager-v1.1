@@ -39,6 +39,7 @@ export default function TrashBin() {
     limit: 10,
     totalPages: 0
   });
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const fetchTrashItems = async (page = 1, limit = 10) => {
     try {
@@ -71,6 +72,31 @@ export default function TrashBin() {
       fetchTrashItems();
     }
   }, [user]);
+
+  const handleDelete = async (trashId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this item? This action cannot be undone and the file cannot be restored.')) {
+      return;
+    }
+    
+    try {
+      setDeleting(trashId);
+      const response = await fetch(`/api/trash?id=${trashId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to delete item');
+      }
+      
+      // Refresh the trash items
+      fetchTrashItems(pagination.page, pagination.limit);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete item');
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const formatDate = (timestamp: { seconds: number; nanoseconds: number }) => {
     return new Date(timestamp.seconds * 1000).toLocaleString();
@@ -141,6 +167,7 @@ export default function TrashBin() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Deleted By</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Deleted At</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Expires In</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -152,6 +179,19 @@ export default function TrashBin() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-black">{formatDate(item.deletedAt)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
                       {getDaysRemaining(item.expiresAt)} days
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deleting === item.id}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {deleting === item.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>
+                        ) : (
+                          <FaTrash className="text-lg" />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

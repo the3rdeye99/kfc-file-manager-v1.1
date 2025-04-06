@@ -5,27 +5,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 export async function POST(request: Request) {
   try {
-    // Check if this is a sendBeacon request (empty body)
-    const contentType = request.headers.get('content-type') || '';
-    if (contentType === '' && request.headers.get('content-length') === '0') {
-      // This is likely a sendBeacon request to delete the session
-      const response = NextResponse.json({ status: 'success' });
-      response.cookies.set('session', '', {
-        maxAge: 0,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        path: '/',
-        expires: new Date(0),
-        sameSite: 'strict',
-      });
-      return response;
-    }
-    
-    // Normal session creation flow
     const { idToken } = await request.json();
     
-    // Create a session cookie with a shorter expiration time
-    const expiresIn = 60 * 60 * 1000; // 1 hour instead of 5 days
+    // Create a session cookie
+    const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
     
     // Set the cookie
@@ -35,7 +18,6 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      sameSite: 'strict', // Add sameSite attribute for better security
     });
 
     return response;
@@ -48,18 +30,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE() {
   try {
-    // Clear the session cookie with the same options used when setting it
+    // Clear the session cookie
     const response = NextResponse.json({ status: 'success' });
-    response.cookies.set('session', '', {
-      maxAge: 0,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      expires: new Date(0), // Set expiration to the past
-      sameSite: 'strict', // Add sameSite attribute for better security
-    });
+    response.cookies.delete('session');
     
     return response;
   } catch (error) {

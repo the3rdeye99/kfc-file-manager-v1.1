@@ -47,56 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
-    // Set up a heartbeat to check session validity
-    const heartbeatInterval = setInterval(checkSession, 60000); // Check every minute
-
-    // Function to clear session when tab is closed
-    const clearSessionOnTabClose = () => {
-      // Use sendBeacon for more reliable delivery during page unload
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/auth/session', '');
-      } else {
-        // Fallback for browsers that don't support sendBeacon
-        const xhr = new XMLHttpRequest();
-        xhr.open('DELETE', '/api/auth/session', false); // false makes it synchronous
-        xhr.send();
+    // Add beforeunload event listener for automatic sign-out
+    const handleBeforeUnload = async () => {
+      try {
+        await signOut(auth);
+        await fetch('/api/auth/session', { method: 'DELETE' });
+      } catch (error) {
+        console.error('Error during automatic sign-out:', error);
       }
     };
 
-    // Add multiple event listeners to catch tab close in different browsers
-    window.addEventListener('beforeunload', clearSessionOnTabClose);
-    window.addEventListener('unload', clearSessionOnTabClose);
-    window.addEventListener('pagehide', clearSessionOnTabClose);
-    
-    // Also use the Page Visibility API as a backup
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // When tab becomes hidden, start a timer
-        const hiddenTime = Date.now();
-        
-        // When tab becomes visible again, check if it was hidden for more than 5 seconds
-        const handleVisibilityChangeBack = () => {
-          const visibleTime = Date.now();
-          const timeHidden = visibleTime - hiddenTime;
-          
-          // If tab was hidden for more than 5 seconds, consider it a tab close/reopen
-          if (timeHidden > 5000) {
-            // Clear the session cookie
-            fetch('/api/auth/session', { method: 'DELETE' }).catch(error => {
-              console.error('Error clearing session cookie:', error);
-            });
-          }
-          
-          // Remove the event listener
-          document.removeEventListener('visibilitychange', handleVisibilityChangeBack);
-        };
-        
-        // Add event listener for when tab becomes visible again
-        document.addEventListener('visibilitychange', handleVisibilityChangeBack);
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -131,11 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      clearInterval(heartbeatInterval);
-      window.removeEventListener('beforeunload', clearSessionOnTabClose);
-      window.removeEventListener('unload', clearSessionOnTabClose);
-      window.removeEventListener('pagehide', clearSessionOnTabClose);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
 
