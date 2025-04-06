@@ -1174,10 +1174,85 @@ export default function FileManager() {
         const item = filteredItems.find(i => i.path === itemPath);
         if (!item) return;
         
+        // Ensure we're within the 'files/' directory
+        const safePath = item.path.startsWith('files/') ? item.path : `files/${item.path}`;
+        
         if (item.type === 'folder') {
-          await handleDeleteFolder(item.path);
+          // For folders, we need to handle them differently to avoid multiple confirmations
+          try {
+            // List all items in the folder
+            const folderRef = ref(storage, safePath);
+            const result = await listAll(folderRef);
+            
+            // Move all files to trash bin
+            const moveToTrashPromises = result.items.map(async (fileItem) => {
+              const response = await fetch('/api/trash', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  filePath: fileItem.fullPath,
+                  fileType: 'file',
+                  fileName: fileItem.fullPath.split('/').pop()
+                }),
+              });
+              
+              if (!response.ok) {
+                throw new Error(`Failed to move ${fileItem.fullPath} to trash bin`);
+              }
+              
+              return deleteObject(fileItem);
+            });
+            
+            await Promise.all(moveToTrashPromises);
+            
+            // Move the folder itself to trash bin
+            const response = await fetch('/api/trash', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                filePath: safePath,
+                fileType: 'folder',
+                fileName: safePath.split('/').pop()
+              }),
+            });
+            
+            if (!response.ok) {
+              throw new Error(`Failed to move folder ${safePath} to trash bin`);
+            }
+          } catch (error) {
+            console.error(`Error moving folder ${safePath} to trash bin:`, error);
+            throw error;
+          }
         } else {
-          await handleDelete(item.path);
+          // For files, move directly to trash bin without confirmation
+          try {
+            const response = await fetch('/api/trash', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                filePath: safePath,
+                fileType: 'file',
+                fileName: safePath.split('/').pop()
+              }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to move file to trash bin');
+            }
+            
+            // Delete from storage
+            const fileRef = ref(storage, safePath);
+            await retryOperation(() => deleteObject(fileRef));
+          } catch (error) {
+            console.error(`Error moving file ${safePath} to trash bin:`, error);
+            throw error;
+          }
         }
       });
       
@@ -1185,6 +1260,12 @@ export default function FileManager() {
       setSelectedItems([]);
       setIsMultiSelectMode(false);
       toast.success(`${selectedItems.length} item(s) moved to trash bin`);
+      
+      // Refresh the file list
+      loadFiles();
+      
+      // Dispatch event to notify StorageDashboard
+      window.dispatchEvent(new Event('filesDeleted'));
     } catch (error) {
       console.error('Error deleting multiple items:', error);
       toast.error('Failed to delete some items');
