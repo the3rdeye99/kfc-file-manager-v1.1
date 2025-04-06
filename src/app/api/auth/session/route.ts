@@ -5,6 +5,21 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 export async function POST(request: Request) {
   try {
+    // Check if this is a beacon request for sign-out
+    const contentType = request.headers.get('content-type');
+    if (contentType && contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      const action = formData.get('action');
+      
+      if (action === 'signout') {
+        // Clear the session cookie
+        const response = NextResponse.json({ status: 'success' });
+        response.cookies.delete('session');
+        return response;
+      }
+    }
+    
+    // Handle regular session creation
     const { idToken } = await request.json();
     
     // Create a session cookie
