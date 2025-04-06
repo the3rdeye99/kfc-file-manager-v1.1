@@ -48,16 +48,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
 
     // Add beforeunload event listener for automatic sign-out
-    const handleBeforeUnload = async () => {
-      try {
-        await signOut(auth);
-        await fetch('/api/auth/session', { method: 'DELETE' });
-      } catch (error) {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Use synchronous XMLHttpRequest for more reliable execution during page unload
+      const xhr = new XMLHttpRequest();
+      xhr.open('DELETE', '/api/auth/session', false); // false makes it synchronous
+      xhr.send();
+      
+      // Sign out from Firebase
+      signOut(auth).catch(error => {
         console.error('Error during automatic sign-out:', error);
-      }
+      });
     };
 
+    // Add both beforeunload and unload event listeners for better coverage
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleBeforeUnload);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -93,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribe();
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleBeforeUnload);
     };
   }, []);
 

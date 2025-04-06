@@ -32,9 +32,15 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
-    // Clear the session cookie
+    // Clear the session cookie with the same options used when setting it
     const response = NextResponse.json({ status: 'success' });
-    response.cookies.delete('session');
+    response.cookies.set('session', '', {
+      maxAge: 0,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      expires: new Date(0), // Set expiration to the past
+    });
     
     return response;
   } catch (error) {
