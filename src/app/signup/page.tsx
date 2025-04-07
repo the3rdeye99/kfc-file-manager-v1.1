@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signup } from '@/app/actions/userActions';
 import toast from 'react-hot-toast';
@@ -17,9 +17,15 @@ export default function SignupPage() {
   const router = useRouter();
   const { user } = useAuth();
 
-  // Redirect if not admin
-  if (!user?.email?.includes('admin')) {
-    router.push('/');
+  useEffect(() => {
+    // Redirect if not admin
+    if (user && !user.email?.includes('admin')) {
+      router.push('/');
+    }
+  }, [user, router]);
+
+  // Don't render the form if user is not admin
+  if (!user || !user.email?.includes('admin')) {
     return null;
   }
 

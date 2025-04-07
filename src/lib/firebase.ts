@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { getFirestore } from 'firebase/firestore';
 
@@ -18,6 +18,16 @@ try {
   console.log('Initializing Firebase client app');
   app = initializeApp(firebaseConfig);
   console.log('Firebase client app initialized successfully');
+  
+  // Set persistence to session
+  const auth = getAuth(app);
+  setPersistence(auth, browserSessionPersistence)
+    .then(() => {
+      console.log('Firebase persistence set to session');
+    })
+    .catch((error) => {
+      console.error('Error setting persistence:', error);
+    });
 } catch (error) {
   console.error('Error initializing Firebase client app:', error);
   throw error;

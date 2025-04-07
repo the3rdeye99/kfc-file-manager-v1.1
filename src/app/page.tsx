@@ -2,19 +2,28 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@app/contexts/AuthContext';
-import FileManager from '@app/components/FileManager';
-import Navigation from '@app/components/Navigation';
-import StorageDashboard from '@app/components/StorageDashboard';
+import { useAuth } from '@/contexts/AuthContext';
+import FileManager from '@/components/FileManager';
+import Navigation from '@/components/Navigation';
+import StorageDashboard from '@/components/StorageDashboard';
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
+    const checkAuth = async () => {
+      if (!loading) {
+        if (!user) {
+          console.log('No user found, redirecting to login');
+          router.push('/login');
+        } else {
+          console.log('User authenticated:', user.email);
+        }
+      }
+    };
+
+    checkAuth();
   }, [user, loading, router]);
 
   useEffect(() => {

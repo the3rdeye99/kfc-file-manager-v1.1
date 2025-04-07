@@ -23,16 +23,17 @@ export async function POST(request: Request) {
     const { idToken } = await request.json();
     
     // Create a session cookie
-    const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
+    const expiresIn = 60 * 60 * 24 * 1000; // 1 day
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
     
     // Set the cookie
     const response = NextResponse.json({ status: 'success' });
     response.cookies.set('session', sessionCookie, {
-      maxAge: expiresIn,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
+      sameSite: 'lax',
+      session: true // This makes it a session cookie
     });
 
     return response;

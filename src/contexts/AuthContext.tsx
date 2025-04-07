@@ -28,15 +28,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check if there's a session cookie
     const checkSession = async () => {
       try {
+        console.log('Checking session...');
         const response = await fetch('/api/auth/check-session');
         if (!response.ok) {
-          // If the session is invalid, sign out the user
+          console.log('Session check failed, signing out user');
           await signOut(auth);
           setUser(null);
+        } else {
+          console.log('Session check passed');
         }
       } catch (error) {
         console.error('Error checking session:', error);
-        // If there's an error checking the session, sign out the user
         await signOut(auth);
         setUser(null);
       } finally {
@@ -47,53 +49,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check the session on mount
     checkSession();
 
-    // Add beforeunload event listener for automatic sign-out
-    const handleBeforeUnload = async (event: BeforeUnloadEvent) => {
-      try {
-        // Use sendBeacon to ensure the request is sent before the page unloads
-        const data = new FormData();
-        data.append('action', 'signout');
-        
-        // Send a beacon request to sign out
-        navigator.sendBeacon('/api/auth/session', data);
-        
-        // Also try to sign out from Firebase
-        await signOut(auth);
-      } catch (error) {
-        console.error('Error during automatic sign-out:', error);
-      }
-    };
-
-    // Add both beforeunload and unload event listeners for better coverage
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('unload', handleBeforeUnload);
-
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+      
       if (user) {
-        // Get the ID token
-        const idToken = await user.getIdToken();
-        
-        // Send the token to your backend to create a session
-        const response = await fetch('/api/auth/session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ idToken }),
-        });
+        try {
+          // Get the ID token
+          const idToken = await user.getIdToken();
+          console.log('Got ID token, creating session...');
+          
+          // Send the token to your backend to create a session
+          const response = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ idToken }),
+          });
 
-        if (!response.ok) {
-          console.error('Failed to create session');
-          // If we can't create a session, sign out the user
+          if (!response.ok) {
+            console.error('Failed to create session:', await response.text());
+            await signOut(auth);
+            setUser(null);
+          } else {
+            console.log('Session created successfully');
+            setUser(user);
+          }
+        } catch (error) {
+          console.error('Error creating session:', error);
           await signOut(auth);
           setUser(null);
-        } else {
-          setUser(user);
         }
       } else {
-        // Clear the session cookie when user logs out
-        await fetch('/api/auth/session', { method: 'DELETE' });
-        setUser(null);
+        try {
+          console.log('Clearing session...');
+          // Clear the session cookie when user logs out
+          await fetch('/api/auth/session', { method: 'DELETE' });
+          setUser(null);
+        } catch (error) {
+          console.error('Error clearing session:', error);
+        }
       }
       
       setLoading(false);
@@ -101,14 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('unload', handleBeforeUnload);
     };
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      console.log('Attempting login...');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('Login successful:', userCredential.user.email);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -126,7 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      console.log('Logging out...');
       await signOut(auth);
+      console.log('Logout successful');
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
