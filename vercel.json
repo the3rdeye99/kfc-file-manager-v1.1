@@ -1,0 +1,19 @@
+{
+    "headers": [
+      {
+        "source": "/:path*",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex"
+          }
+        ]
+      }
+    ],
+    "crons": [
+      {
+        "path": "/api/cron/cleanup-trash",
+        "schedule": "0 0 * * *"
+      }
+    ]
+  }
