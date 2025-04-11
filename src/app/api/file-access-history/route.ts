@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
     console.log('Creating query with orderBy timestamp and limit');
     const q = fileAccessHistoryRef
       .orderBy('timestamp', 'desc')
-      .limit(limitValue);
+      .limit(limitValue)
+      .offset((page - 1) * limitValue);
 
     let accessHistory = [];
     try {
