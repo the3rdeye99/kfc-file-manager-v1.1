@@ -286,26 +286,45 @@ export default function UserManagement() {
       {editingUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium mb-4">Edit User</h3>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-full p-2 border rounded mb-4"
-              placeholder="Enter new name"
-            />
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-black">Edit User Information</h3>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                User Email
+              </label>
+              <p className="text-black">{editingUser.email}</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                placeholder="Enter new display name"
+              />
+            </div>
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setEditingUser(null)}
-                className="px-4 py-2 border rounded"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUpdateUser}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                Save
+                Save Changes
               </button>
             </div>
           </div>
@@ -316,22 +335,48 @@ export default function UserManagement() {
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium mb-4">Change Password</h3>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full p-2 border rounded mb-4"
-                placeholder="Enter new password"
-              />
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-black">Change User Password</h3>
               <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2 text-gray-500"
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setNewPassword('');
+                  setSelectedUser(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
               >
-                {showPassword ? <FiEyeOff /> : <FiEye />}
+                <FiX size={20} />
               </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                User Email
+              </label>
+              <p className="text-black">{selectedUser?.email}</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-black">
+                Password must be at least 6 characters long
+              </p>
             </div>
             <div className="flex justify-end space-x-2">
               <button
@@ -340,15 +385,15 @@ export default function UserManagement() {
                   setNewPassword('');
                   setSelectedUser(null);
                 }}
-                className="px-4 py-2 border rounded"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleChangePassword}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                Save
+                Update Password
               </button>
             </div>
           </div>
@@ -359,29 +404,60 @@ export default function UserManagement() {
       {editingRole && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium mb-4">Change Role</h3>
-            <div className="space-y-2">
-              <button
-                onClick={() => handleChangeRole(editingRole, 'viewer')}
-                className={`w-full p-2 border rounded ${
-                  editingRole.role === 'viewer' ? 'bg-green-100 border-green-500' : ''
-                }`}
-              >
-                Viewer
-              </button>
-              <button
-                onClick={() => handleChangeRole(editingRole, 'editor')}
-                className={`w-full p-2 border rounded ${
-                  editingRole.role === 'editor' ? 'bg-purple-100 border-purple-500' : ''
-                }`}
-              >
-                Editor
-              </button>
-            </div>
-            <div className="mt-4 flex justify-end">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-black">Change User Role</h3>
               <button
                 onClick={() => setEditingRole(null)}
-                className="px-4 py-2 border rounded"
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                User Email
+              </label>
+              <p className="text-black">{editingRole.email}</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                Current Role
+              </label>
+              <p className="text-black capitalize">{editingRole.role}</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-1">
+                Select New Role
+              </label>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleChangeRole(editingRole, 'viewer')}
+                  className={`w-full p-3 border rounded-md flex items-center justify-between ${
+                    editingRole.role === 'viewer' 
+                      ? 'bg-green-50 border-green-500 text-green-700' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="text-black">Viewer</span>
+                  <span className="text-xs text-black">Can view files only</span>
+                </button>
+                <button
+                  onClick={() => handleChangeRole(editingRole, 'editor')}
+                  className={`w-full p-3 border rounded-md flex items-center justify-between ${
+                    editingRole.role === 'editor' 
+                      ? 'bg-purple-50 border-purple-500 text-purple-700' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="text-black">Editor</span>
+                  <span className="text-xs text-black">Can view and edit files</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setEditingRole(null)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
                 Close
               </button>
