@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob } from 'firebase/storage';
+import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob, updateMetadata } from 'firebase/storage';
 import { storage, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload, FiCheckSquare, FiSquare } from 'react-icons/fi';
+import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload, FiCheckSquare, FiSquare, FiLock, FiUnlock } from 'react-icons/fi';
 import Image from 'next/image';
 import { collection, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -19,24 +19,27 @@ interface FileItem {
   lastModified?: number;
   category?: 'includes_coo' | 'without_coo';
   createdAt?: number;
+  isLocked?: boolean;
+  lockedBy?: string;
+  lockedAt?: string;
 }
 
 // Helper function to check user permissions
 const getUserPermissions = (email: string | null | undefined, role?: string) => {
-  if (!email) return { isAdmin: false, canDownload: false };
+  if (!email) return { isAdmin: false, canDownload: false, canLock: false };
   
   // Admin has all permissions
   if (email === 'admin@kayodefilani.com') {
-    return { isAdmin: true, canDownload: true };
+    return { isAdmin: true, canDownload: true, canLock: true };
   }
   
   // Check role-based permissions
   if (role === 'editor') {
-    return { isAdmin: false, canDownload: true };
+    return { isAdmin: false, canDownload: true, canLock: true };
   }
   
   // Default to viewer permissions
-  return { isAdmin: false, canDownload: false };
+  return { isAdmin: false, canDownload: false, canLock: false };
 };
 
 const formatBytes = (bytes: number): string => {
@@ -206,7 +209,6 @@ export default function FileManager() {
       // Process folders (items ending with .placeholder)
       const folderPromises = result.prefixes.map(async (prefix) => {
         try {
-          // Check if this is a real folder by looking for .placeholder
           const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
           try {
             const metadata = await getMetadata(placeholderRef);
@@ -218,11 +220,13 @@ export default function FileManager() {
               parentFolder: currentFolder,
               category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
               createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
-              lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined
+              lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+              isLocked: metadata.customMetadata?.isLocked === 'true',
+              lockedBy: metadata.customMetadata?.lockedBy,
+              lockedAt: metadata.customMetadata?.lockedAt
             };
             return folderItem;
           } catch (error) {
-            // If .placeholder doesn't exist, this might be a file with a path separator
             return null;
           }
         } catch (error) {
@@ -386,10 +390,21 @@ export default function FileManager() {
   }, [searchQuery, allFiles, files]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isAdmin) return;
+    if (!e.target.files || e.target.files.length === 0) return;
     
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    // Check if current folder is locked
+    if (currentFolder) {
+      const folderRef = ref(storage, `files/${currentFolder}/.placeholder`);
+      try {
+        const metadata = await getMetadata(folderRef);
+        if (metadata.customMetadata?.isLocked === 'true') {
+          toast.error('Cannot upload to a locked folder');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking folder lock status:', error);
+      }
+    }
     
     try {
     setUploading(true);
@@ -403,7 +418,7 @@ export default function FileManager() {
       const uploadTasksArray: UploadTask[] = [];
       setUploadTasks(uploadTasksArray);
       
-      const uploadPromises = Array.from(files).map(async (file) => {
+      const uploadPromises = Array.from(e.target.files).map(async (file) => {
         try {
           // Sanitize the filename to prevent path traversal but preserve spaces
           const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
@@ -564,7 +579,14 @@ export default function FileManager() {
       
       // Delete from storage
       const fileRef = ref(storage, safeFilePath);
-      await retryOperation(() => deleteObject(fileRef));
+      try {
+        await retryOperation(() => deleteObject(fileRef));
+      } catch (deleteError: any) {
+        // If the file doesn't exist, it's already deleted
+        if (deleteError.code !== 'storage/object-not-found') {
+          throw deleteError;
+        }
+      }
       
       toast.success('File moved to trash bin');
       loadFiles();
@@ -979,11 +1001,20 @@ export default function FileManager() {
   });
 
   const createFolder = async () => {
-    if (!isAdmin || !newFolderName.trim()) return;
-    
+    if (!newFolderName.trim()) {
+      toast.error('Please enter a folder name');
+      return;
+    }
+
+    // Sanitize folder name
+    const sanitizedFolderName = newFolderName.trim().replace(/[^a-zA-Z0-9-_ ]/g, '');
+
+    if (!sanitizedFolderName) {
+      toast.error('Invalid folder name');
+      return;
+    }
+
     try {
-      // Sanitize the folder name to prevent path traversal but preserve spaces
-      const sanitizedFolderName = newFolderName.replace(/[^a-zA-Z0-9 .-]/g, '_');
       // Always ensure we're within the 'files/' directory
       const folderPath = currentFolder ? `files/${currentFolder}/${sanitizedFolderName}` : `files/${sanitizedFolderName}`;
       
@@ -995,7 +1026,10 @@ export default function FileManager() {
       const emptyBlob = new Blob([''], { type: 'text/plain' });
       await uploadBytesResumable(placeholderRef, emptyBlob, {
         customMetadata: {
-          category: newFolderCategory
+          category: newFolderCategory,
+          isLocked: 'false',
+          lockedBy: '',
+          lockedAt: ''
         }
       });
       
@@ -1015,6 +1049,12 @@ export default function FileManager() {
   };
 
   const handleCreateSubFolder = (folder: FileItem) => {
+    // Check if folder is locked
+    if (folder.isLocked) {
+      toast.error('Cannot create subfolder in a locked folder');
+      return;
+    }
+    
     setSelectedFolder(folder);
     setNewFolderName('');
     // Inherit the parent folder's category
@@ -1033,74 +1073,67 @@ export default function FileManager() {
       // Ensure we're within the 'files/' directory
       const safeFolderPath = folderPath.startsWith('files/') ? folderPath : `files/${folderPath}`;
       
-      // List all items in the folder
+      // Check if folder is locked
+      try {
+        const placeholderRef = ref(storage, `${safeFolderPath}/.placeholder`);
+        const metadata = await getMetadata(placeholderRef);
+        if (metadata.customMetadata?.isLocked === 'true') {
+          toast.error('Cannot delete a locked folder');
+          return;
+        }
+      } catch (error: any) {
+        // If the placeholder doesn't exist, continue with deletion
+        if (error.code !== 'storage/object-not-found') {
+          throw error;
+        }
+      }
+      
+      // Delete all files in the folder
       const folderRef = ref(storage, safeFolderPath);
       const result = await listAll(folderRef);
       
-      // Move all files to trash bin
-      const moveToTrashPromises = result.items.map(async (item) => {
-        const response = await fetch('/api/trash', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filePath: item.fullPath,
-            fileType: 'file',
-            fileName: item.fullPath.split('/').pop()
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to move ${item.fullPath} to trash bin`);
+      // Delete all files
+      const deletePromises = result.items.map(item => deleteObject(item));
+      await Promise.all(deletePromises);
+      
+      // Delete all subfolders recursively
+      const subfolderPromises = result.prefixes.map(prefix => handleDeleteFolder(prefix.fullPath));
+      await Promise.all(subfolderPromises);
+      
+      // Try to delete the placeholder file if it exists
+      try {
+        const placeholderRef = ref(storage, `${safeFolderPath}/.placeholder`);
+        await deleteObject(placeholderRef);
+      } catch (error: any) {
+        // If the placeholder doesn't exist, that's fine
+        if (error.code !== 'storage/object-not-found') {
+          throw error;
         }
-        
-        return deleteObject(item);
-      });
-      
-      await Promise.all(moveToTrashPromises);
-      
-      // Move all subfolders to trash bin recursively
-      const moveFolderPromises = result.prefixes.map(prefix => handleDeleteFolder(prefix.fullPath));
-      await Promise.all(moveFolderPromises);
-      
-      // Move the folder itself to trash bin
-      const response = await fetch('/api/trash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filePath: safeFolderPath,
-          fileType: 'folder',
-          fileName: safeFolderPath.split('/').pop()
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to move folder ${safeFolderPath} to trash bin`);
       }
       
-      toast.success('Folder moved to trash bin');
+      toast.success('Folder deleted successfully');
       loadFiles();
-      
-      // Dispatch event to notify StorageDashboard
-      window.dispatchEvent(new Event('folderDeleted'));
     } catch (error) {
-      console.error('Error moving folder to trash bin:', error);
-      toast.error('Failed to move folder to trash bin');
+      console.error('Error deleting folder:', error);
+      toast.error('Failed to delete folder');
     }
   };
 
   const handleFolderClick = async (folder: FileItem) => {
     try {
+      // Check if folder is locked and user is not admin or editor
+      if (folder.isLocked && !isAdmin && !canLock) {
+        toast.error('This folder is locked and cannot be accessed');
+        return;
+      }
+
       // Record folder access
       try {
         const response = await fetch('/api/file-access-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({ 
             filePath: folder.path,
             displayName: user?.displayName || null
@@ -1188,78 +1221,57 @@ export default function FileManager() {
         if (item.type === 'folder') {
           // For folders, we need to handle them differently to avoid multiple confirmations
           try {
+            // Check if folder is locked
+            try {
+              const placeholderRef = ref(storage, `${safePath}/.placeholder`);
+              const metadata = await getMetadata(placeholderRef);
+              if (metadata.customMetadata?.isLocked === 'true') {
+                toast.error(`Cannot delete locked folder: ${item.name}`);
+                return;
+              }
+            } catch (error: any) {
+              // If the placeholder doesn't exist, continue with deletion
+              if (error.code !== 'storage/object-not-found') {
+                throw error;
+              }
+            }
+            
             // List all items in the folder
             const folderRef = ref(storage, safePath);
             const result = await listAll(folderRef);
             
-            // Move all files to trash bin
-            const moveToTrashPromises = result.items.map(async (fileItem) => {
-              const response = await fetch('/api/trash', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  filePath: fileItem.fullPath,
-                  fileType: 'file',
-                  fileName: fileItem.fullPath.split('/').pop()
-                }),
-              });
-              
-              if (!response.ok) {
-                throw new Error(`Failed to move ${fileItem.fullPath} to trash bin`);
+            // Delete all files
+            const deletePromises = result.items.map(item => deleteObject(item));
+            await Promise.all(deletePromises);
+            
+            // Delete all subfolders recursively
+            const subfolderPromises = result.prefixes.map(prefix => handleDeleteFolder(prefix.fullPath));
+            await Promise.all(subfolderPromises);
+            
+            // Try to delete the placeholder file if it exists
+            try {
+              const placeholderRef = ref(storage, `${safePath}/.placeholder`);
+              await deleteObject(placeholderRef);
+            } catch (error: any) {
+              // If the placeholder doesn't exist, that's fine
+              if (error.code !== 'storage/object-not-found') {
+                throw error;
               }
-              
-              return deleteObject(fileItem);
-            });
-            
-            await Promise.all(moveToTrashPromises);
-            
-            // Move the folder itself to trash bin
-            const response = await fetch('/api/trash', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                filePath: safePath,
-                fileType: 'folder',
-                fileName: safePath.split('/').pop()
-              }),
-            });
-            
-            if (!response.ok) {
-              throw new Error(`Failed to move folder ${safePath} to trash bin`);
             }
           } catch (error) {
-            console.error(`Error moving folder ${safePath} to trash bin:`, error);
+            console.error(`Error deleting folder ${safePath}:`, error);
             throw error;
           }
         } else {
-          // For files, move directly to trash bin without confirmation
+          // For files, delete directly without confirmation
           try {
-            const response = await fetch('/api/trash', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                filePath: safePath,
-                fileType: 'file',
-                fileName: safePath.split('/').pop()
-              }),
-            });
-            
-            if (!response.ok) {
-              throw new Error('Failed to move file to trash bin');
-            }
-            
-            // Delete from storage
             const fileRef = ref(storage, safePath);
             await retryOperation(() => deleteObject(fileRef));
-          } catch (error) {
-            console.error(`Error moving file ${safePath} to trash bin:`, error);
-            throw error;
+          } catch (error: any) {
+            // If the file doesn't exist, it's already deleted
+            if (error.code !== 'storage/object-not-found') {
+              throw error;
+            }
           }
         }
       });
@@ -1267,7 +1279,7 @@ export default function FileManager() {
       await Promise.all(deletePromises);
       setSelectedItems([]);
       setIsMultiSelectMode(false);
-      toast.success(`${selectedItems.length} item(s) moved to trash bin`);
+      toast.success(`${selectedItems.length} item(s) deleted successfully`);
       
       // Refresh the file list
       loadFiles();
@@ -1300,7 +1312,7 @@ export default function FileManager() {
   }, [user]);
 
   // Get user permissions
-  const { isAdmin, canDownload } = getUserPermissions(user?.email, userRole);
+  const { isAdmin, canDownload, canLock } = getUserPermissions(user?.email, userRole);
 
   const handleCancelUpload = () => {
     if (uploadTasks.length > 0) {
@@ -1326,6 +1338,116 @@ export default function FileManager() {
         }
       });
     }
+  };
+
+  const handleLockFolder = async (folder: FileItem) => {
+    if (!isAdmin && !canLock) return;
+
+    try {
+      const folderRef = ref(storage, `${folder.path}/.placeholder`);
+      const metadata = await getMetadata(folderRef);
+      
+      const newMetadata = {
+        ...metadata.customMetadata,
+        isLocked: metadata.customMetadata?.isLocked === 'true' ? 'false' : 'true',
+        lockedBy: metadata.customMetadata?.isLocked === 'true' ? '' : user?.email || '',
+        lockedAt: metadata.customMetadata?.isLocked === 'true' ? '' : new Date().toISOString()
+      };
+
+      await updateMetadata(folderRef, {
+        customMetadata: newMetadata
+      });
+
+      // Update the local state immediately
+      setFiles(prevFiles => 
+        prevFiles.map(file => 
+          file.path === folder.path 
+            ? { 
+                ...file, 
+                isLocked: newMetadata.isLocked === 'true',
+                lockedBy: newMetadata.lockedBy,
+                lockedAt: newMetadata.lockedAt
+              }
+            : file
+        )
+      );
+
+      toast.success(metadata.customMetadata?.isLocked === 'true' ? 'Folder unlocked successfully' : 'Folder locked successfully');
+    } catch (error) {
+      console.error('Error locking/unlocking folder:', error);
+      toast.error('Failed to lock/unlock folder');
+    }
+  };
+
+  // Add a useEffect to listen for metadata changes
+  useEffect(() => {
+    const listenForMetadataChanges = async () => {
+      try {
+        const currentPath = currentFolder === 'root' ? 'files' : `files/${currentFolder}`;
+        const folderRef = ref(storage, currentPath);
+        
+        // List all files and folders
+        const result = await listAll(folderRef);
+        
+        // Process folders (items ending with .placeholder)
+        const folderPromises = result.prefixes.map(async (prefix) => {
+          try {
+            const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
+            const metadata = await getMetadata(placeholderRef);
+            
+            // Update the local state if metadata has changed
+            setFiles(prevFiles => 
+              prevFiles.map(file => 
+                file.path === prefix.fullPath 
+                  ? { 
+                      ...file, 
+                      isLocked: metadata.customMetadata?.isLocked === 'true',
+                      lockedBy: metadata.customMetadata?.lockedBy || '',
+                      lockedAt: metadata.customMetadata?.lockedAt || ''
+                    }
+                  : file
+              )
+            );
+          } catch (error) {
+            console.error('Error processing folder metadata:', error);
+          }
+        });
+        
+        await Promise.all(folderPromises);
+      } catch (error) {
+        console.error('Error listening for metadata changes:', error);
+      }
+    };
+
+    // Set up an interval to check for metadata changes
+    const intervalId = setInterval(listenForMetadataChanges, 5000); // Check every 5 seconds
+
+    // Clean up the interval when the component unmounts
+    return () => clearInterval(intervalId);
+  }, [currentFolder]);
+
+  // Update the folder icon section
+  const renderFolderIcon = (item: FileItem) => {
+    return (
+      <div className="flex items-center">
+        {(isAdmin || canLock) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleLockFolder(item);
+            }}
+            className="mr-2"
+          >
+            {item.isLocked ? (
+              <FiLock className="w-5 h-5 text-red-500" />
+            ) : (
+              <FiUnlock className="w-5 h-5 text-green-500" />
+            )}
+          </button>
+        )}
+        <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} ${(isAdmin || canLock) ? 'text-green-500' : (item.isLocked ? 'text-red-500' : 'text-green-500')}`} />
+      </div>
+    );
   };
 
   return (
@@ -1487,7 +1609,7 @@ export default function FileManager() {
                     </div>
                   )}
                   {item.type === 'folder' ? (
-                    <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} text-blue-500`} />
+                    renderFolderIcon(item)
                   ) : (
                     <div className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} flex items-center justify-center`}>
                       {getFileIcon(item.name)}
