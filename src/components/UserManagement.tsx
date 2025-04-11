@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff, FiUser } from 'react-icons/fi';
+import { FiTrash2, FiArrowLeft, FiEdit2, FiX, FiLock, FiEye, FiEyeOff, FiUser, FiClock, FiUsers, FiPlus, FiSearch } from 'react-icons/fi';
 import { deleteUser, updateUser, updateUserRole } from '@/app/actions/userActions';
+import FileAccessHistory from './FileAccessHistory';
 
 interface User {
   uid: string;
@@ -26,6 +27,7 @@ export default function UserManagement() {
   const { user } = useAuth();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'history'>('users');
 
   useEffect(() => {
     loadUsers();
@@ -178,183 +180,176 @@ export default function UserManagement() {
           </button>
         </div>
         <div className="bg-white rounded-lg shadow-md border border-gray-200">
-          <div className="px-4 py-5 sm:px-6">
-            <h2 className="text-2xl font-bold text-black">User Management</h2>
-          </div>
           <div className="border-t border-gray-200">
-            <ul className="divide-y divide-gray-200">
-              {users.map((user) => (
-                <li key={user.uid} className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <div className={`h-2 w-2 rounded-full ${
-                          user.email === 'admin@kayodefilani.com' ? 'bg-blue-500' : user.role === 'viewer' ? 'bg-green-500' : 'bg-purple-500'
-                        }`} />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-black">{user.displayName || 'No name set'}</p>
-                        <p className="text-sm text-gray-500">{user.email}</p>
-                        <p className={`text-xs font-medium ${
-                          user.email === 'admin@kayodefilani.com' ? 'text-red-600' :
-                          user.role === 'editor' ? 'text-purple-600' :
-                          'text-green-600'
-                        }`}>
-                          Role: {user.email === 'admin@kayodefilani.com' ? 'admin' : (user.role || 'viewer')}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {user.email !== 'admin@kayodefilani.com' && (
-                        <>
-                          <button
-                            onClick={() => handleEditUser(user)}
-                            className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            <FiEdit2 />
-                            Edit
-                          </button>
-                          {user.role !== 'admin' && (
+            <nav className="flex space-x-8 px-4 py-3 border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`${
+                  activeTab === 'users'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                <FiUser />
+                Users
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`${
+                  activeTab === 'history'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                <FiClock />
+                Access History
+              </button>
+            </nav>
+            <div className="p-4">
+              {activeTab === 'users' ? (
+                <ul className="divide-y divide-gray-200">
+                  {users.map((user) => (
+                    <li key={user.uid} className="px-4 py-4 sm:px-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0">
+                            <div className={`h-2 w-2 rounded-full ${
+                              user.email === 'admin@kayodefilani.com' ? 'bg-blue-500' : user.role === 'viewer' ? 'bg-green-500' : 'bg-purple-500'
+                            }`} />
+                          </div>
+                          <div className="ml-3">
+                            <p className="text-sm font-medium text-black">{user.displayName || 'No name set'}</p>
+                            <p className="text-sm text-gray-500">{user.email}</p>
+                            <p className={`text-xs font-medium ${
+                              user.email === 'admin@kayodefilani.com' ? 'text-red-600' :
+                              user.role === 'editor' ? 'text-purple-600' :
+                              'text-green-600'
+                            }`}>
+                              Role: {user.email === 'admin@kayodefilani.com' ? 'admin' : (user.role || 'viewer')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {user.email !== 'admin@kayodefilani.com' && (
                             <>
                               <button
-                                onClick={() => {
-                                  setSelectedUser(user);
-                                  setShowPasswordModal(true);
-                                }}
-                                className="text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                                onClick={() => handleEditUser(user)}
+                                className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
                               >
-                                <FiLock />
-                                Change Password
+                                <FiEdit2 />
+                                Edit
                               </button>
-                              <button
-                                onClick={() => setEditingRole(user)}
-                                className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                              >
-                                <FiUser />
-                                Change Role
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(user.uid)}
-                                className="text-red-600 hover:text-red-700 flex items-center gap-1"
-                              >
-                                <FiTrash2 />
-                                Delete
-                              </button>
+                              {user.role !== 'admin' && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedUser(user);
+                                      setShowPasswordModal(true);
+                                    }}
+                                    className="text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                                  >
+                                    <FiLock />
+                                    Change Password
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingRole(user)}
+                                    className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                                  >
+                                    <FiUser />
+                                    Change Role
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(user.uid)}
+                                    className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                                  >
+                                    <FiTrash2 />
+                                    Delete
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <FileAccessHistory />
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-black">Edit User</h3>
+            <h3 className="text-lg font-medium mb-4">Edit User</h3>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Enter new name"
+            />
+            <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setEditingUser(null)}
-                className="text-gray-500 hover:text-gray-700"
+                className="px-4 py-2 border rounded"
               >
-                <FiX className="w-6 h-6" />
+                Cancel
               </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-black">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md shadow-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUpdateUser}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700"
-                >
-                  Save Changes
-                </button>
-              </div>
+              <button
+                onClick={handleUpdateUser}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Change Password Modal */}
-      {showPasswordModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-black">Change Password</h3>
+            <h3 className="text-lg font-medium mb-4">Change Password</h3>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full p-2 border rounded mb-4"
+                placeholder="Enter new password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2 text-gray-500"
+              >
+                {showPassword ? <FiEyeOff /> : <FiEye />}
+              </button>
+            </div>
+            <div className="flex justify-end space-x-2">
               <button
                 onClick={() => {
                   setShowPasswordModal(false);
                   setNewPassword('');
                   setSelectedUser(null);
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="px-4 py-2 border rounded"
               >
-                <FiX className="w-6 h-6" />
+                Cancel
               </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="newPassword" className="block text-sm font-medium text-black">
-                  New Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="newPassword"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    {showPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setNewPassword('');
-                    setSelectedUser(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md shadow-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleChangePassword}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700"
-                >
-                  Change Password
-                </button>
-              </div>
+              <button
+                onClick={handleChangePassword}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
@@ -362,51 +357,34 @@ export default function UserManagement() {
 
       {/* Change Role Modal */}
       {editingRole && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-black">Change User Role</h3>
+            <h3 className="text-lg font-medium mb-4">Change Role</h3>
+            <div className="space-y-2">
               <button
-                onClick={() => setEditingRole(null)}
-                className="text-gray-500 hover:text-gray-700"
+                onClick={() => handleChangeRole(editingRole, 'viewer')}
+                className={`w-full p-2 border rounded ${
+                  editingRole.role === 'viewer' ? 'bg-green-100 border-green-500' : ''
+                }`}
               >
-                <FiX className="w-6 h-6" />
+                Viewer
+              </button>
+              <button
+                onClick={() => handleChangeRole(editingRole, 'editor')}
+                className={`w-full p-2 border rounded ${
+                  editingRole.role === 'editor' ? 'bg-purple-100 border-purple-500' : ''
+                }`}
+              >
+                Editor
               </button>
             </div>
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Change role for <span className="font-medium">{editingRole.displayName || editingRole.email}</span>
-              </p>
-              <div className="flex flex-col space-y-2">
-                <button
-                  onClick={() => handleChangeRole(editingRole, 'viewer')}
-                  className={`p-3 rounded-lg border ${
-                    editingRole.role === 'viewer' 
-                      ? 'bg-green-50 border-green-200' 
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
-                    <span className="font-medium text-black">Viewer</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Can view files but cannot download</p>
-                </button>
-                <button
-                  onClick={() => handleChangeRole(editingRole, 'editor')}
-                  className={`p-3 rounded-lg border ${
-                    editingRole.role === 'editor' 
-                      ? 'bg-purple-50 border-purple-200' 
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <div className="h-2 w-2 rounded-full bg-purple-500 mr-2"></div>
-                    <span className="font-medium text-black">Editor</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Can view and download files</p>
-                </button>
-              </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setEditingRole(null)}
+                className="px-4 py-2 border rounded"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

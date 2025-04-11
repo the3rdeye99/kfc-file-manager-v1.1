@@ -36,37 +36,16 @@ export default function FileAccessHistory() {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching access history with page:', pagination.page, 'limit:', pagination.limit);
       const response = await fetch(`/api/file-access-history?page=${pagination.page}&limit=${pagination.limit}`);
       
       if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        console.error('API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorBody
-        });
-        
-        // Extract error message from the response
-        const errorMessage = errorBody.message || errorBody.error || 'Failed to fetch access history';
-        throw new Error(`${errorMessage} (${errorBody.code || 'UNKNOWN_ERROR'})`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch access history');
       }
       
       const data = await response.json();
-      console.log('Access history data received:', {
-        total: data.total,
-        page: data.page,
-        limit: data.limit,
-        totalPages: data.totalPages,
-        records: data.accessHistory?.length || 0
-      });
       
-      if (!data.accessHistory) {
-        console.error('Invalid response format:', data);
-        throw new Error('Invalid response format');
-      }
-      
-      setAccessHistory(data.accessHistory);
+      setAccessHistory(data.accessHistory || []);
       setPagination({
         total: data.total || 0,
         page: data.page || 1,
@@ -194,23 +173,31 @@ export default function FileAccessHistory() {
         <button
           onClick={() => handlePageChange(pagination.page - 1)}
           disabled={pagination.page === 1}
-          className="flex items-center space-x-1 px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-900"
+          className={`px-4 py-2 rounded ${
+            pagination.page === 1
+              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-500 text-white hover:bg-blue-600'
+          }`}
         >
-          <FiChevronLeft className="text-gray-900" />
-          <span>Previous</span>
+          <FiChevronLeft className="inline-block mr-1" />
+          Previous
         </button>
         
-        <div className="text-gray-900">
+        <span className="text-gray-900">
           Page {pagination.page} of {pagination.totalPages}
-        </div>
+        </span>
         
         <button
           onClick={() => handlePageChange(pagination.page + 1)}
           disabled={pagination.page === pagination.totalPages}
-          className="flex items-center space-x-1 px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-900"
+          className={`px-4 py-2 rounded ${
+            pagination.page === pagination.totalPages
+              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-500 text-white hover:bg-blue-600'
+          }`}
         >
-          <span>Next</span>
-          <FiChevronRight className="text-gray-900" />
+          Next
+          <FiChevronRight className="inline-block ml-1" />
         </button>
       </div>
     </div>

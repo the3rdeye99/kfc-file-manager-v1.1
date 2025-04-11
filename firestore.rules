@@ -9,10 +9,18 @@ service cloud.firestore {
 
     // User management rules
     match /users/{userId} {
-      // Allow read access to authenticated users
-      allow read: if request.auth != null;
+      // Allow read access to admin users
+      allow read: if request.auth != null && 
+        request.auth.token.email == "admin@kayodefilani.com";
       
       // Allow write access only to admin users
+      allow write: if request.auth != null && 
+        request.auth.token.email == "admin@kayodefilani.com";
+    }
+
+    // File access rules
+    match /fileAccess/{document=**} {
+      allow read: if request.auth != null;
       allow write: if request.auth != null && 
         request.auth.token.email == "admin@kayodefilani.com";
     }
