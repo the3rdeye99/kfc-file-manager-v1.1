@@ -28,8 +28,18 @@ export default function Login() {
       setLoading(true);
       await login(email, password);
       toast.success('Logged in successfully');
-      router.replace('/');
-      router.refresh();
+      
+      // Wait for a short delay to allow auth state to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check if user is now authenticated
+      if (user) {
+        router.replace('/');
+        router.refresh();
+      } else {
+        // If user is still not authenticated, force a page reload
+        window.location.href = '/';
+      }
     } catch (error: unknown) {
       console.error('Login error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to log in');
