@@ -104,6 +104,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Attempting login...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Login successful:', userCredential.user.email);
+      
+      // Wait for the ID token to be available
+      const idToken = await userCredential.user.getIdToken();
+      console.log('Got ID token, creating session...');
+      
+      // Send the token to your backend to create a session
+      const response = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to create session:', await response.text());
+        await signOut(auth);
+        setUser(null);
+        throw new Error('Failed to create session');
+      }
+
+      console.log('Session created successfully');
+      setUser(userCredential.user);
+      return userCredential.user;
     } catch (error) {
       console.error('Login error:', error);
       throw error;

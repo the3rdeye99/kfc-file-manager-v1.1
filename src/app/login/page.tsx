@@ -26,10 +26,12 @@ export default function Login() {
     
     try {
       setLoading(true);
-      await login(email, password);
-      toast.success('Logged in successfully');
-      router.replace('/');
-      router.refresh();
+      const user = await login(email, password);
+      if (user) {
+        toast.success('Logged in successfully');
+        // Use window.location for a full page refresh
+        window.location.href = '/';
+      }
     } catch (error: unknown) {
       console.error('Login error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to log in');
