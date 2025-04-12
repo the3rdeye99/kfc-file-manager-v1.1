@@ -104,19 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Attempting login...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Login successful:', userCredential.user.email);
-      
-      // Wait for the auth state to be updated
-      await new Promise<void>((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          if (user) {
-            unsubscribe();
-            resolve();
-          }
-        });
-      });
-      
-      // Force a session check
-      await checkSession();
     } catch (error) {
       console.error('Login error:', error);
       throw error;
