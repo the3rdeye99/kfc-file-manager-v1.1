@@ -121,17 +121,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      console.log('Logging out...');
-      // Clear the session cookie first
-      await fetch('/api/auth/session', { method: 'DELETE' });
-      // Then sign out from Firebase
-      await signOut(auth);
+      console.log('Starting logout process...');
+      
+      // Clear the session cookie
+      await fetch('/api/auth/session', {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      // Sign out from Firebase
+      await auth.signOut();
+      
       // Clear local state
       setUser(null);
-      console.log('Logout successful');
+      
+      // Force a hard refresh to clear any cached state
+      window.location.href = '/login';
+      
+      console.log('Logout completed successfully');
     } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
+      console.error('Error during logout:', error);
+      // Still redirect to login even if there's an error
+      window.location.href = '/login';
     }
   };
 

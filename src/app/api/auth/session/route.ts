@@ -52,7 +52,10 @@ export async function DELETE() {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Set-Cookie': 'session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'
+        'Set-Cookie': 'session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       }
     });
     return response;
