@@ -5,7 +5,8 @@ import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, Uploa
 import { storage, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FiTrash2, FiFolder, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload, FiCheckSquare, FiSquare, FiLock, FiUnlock } from 'react-icons/fi';
+import { FiTrash2, FiFolderPlus, FiGrid, FiList, FiSearch, FiEye, FiX, FiUpload, FiRefreshCw, FiFile, FiImage, FiFileText, FiArchive, FiVideo, FiMusic, FiCode, FiEdit2, FiSave, FiDownload, FiCheckSquare, FiSquare, FiLock, FiUnlock } from 'react-icons/fi';
+import { FaFolder } from 'react-icons/fa';
 import Image from 'next/image';
 import { collection, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -17,7 +18,7 @@ interface FileItem {
   parentFolder: string;
   size?: number;
   lastModified?: number;
-  category?: 'includes_coo' | 'without_coo';
+  category?: 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' | 'includes_coo' | 'without_coo';
   createdAt?: number;
   isLocked?: boolean;
   lockedBy?: string;
@@ -135,7 +136,7 @@ export default function FileManager() {
   const [allFiles, setAllFiles] = useState<FileItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'includes_coo' | 'without_coo'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' | 'includes_coo' | 'without_coo'>('all');
   const [newFolderCategory, setNewFolderCategory] = useState<'includes_coo' | 'without_coo'>('includes_coo');
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showNewSubFolderModal, setShowNewSubFolderModal] = useState(false);
@@ -143,6 +144,9 @@ export default function FileManager() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadCategory, setUploadCategory] = useState<'contracts' | 'certificate_of_occupancy' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'evidence_files' | 'invoices_billing' | 'scanned_documents' | 'property_ownership' | 'title_deeds' | 'lease_agreements' | 'land_use_files'>('contracts');
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -178,12 +182,12 @@ export default function FileManager() {
           const metadata = await getMetadata(item);
           
           // Get the folder's category if available
-          let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
+          let folderCategory: 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' = 'contracts';
           if (currentFolder) {
             const placeholderRef = ref(storage, `files/${currentFolder}/.placeholder`);
             try {
               const folderMetadata = await getMetadata(placeholderRef);
-              folderCategory = (folderMetadata.customMetadata?.category as 'includes_coo' | 'without_coo') || 'includes_coo';
+              folderCategory = (folderMetadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing') || 'contracts';
             } catch (error) {
               console.error('Error getting folder category:', error);
             }
@@ -197,7 +201,7 @@ export default function FileManager() {
             size: metadata.size,
             parentFolder: currentFolder,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-            category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo' || folderCategory
+            category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' || folderCategory
           };
           return fileItem;
         } catch (error) {
@@ -218,7 +222,7 @@ export default function FileManager() {
               url: '',
               type: 'folder',
               parentFolder: currentFolder,
-              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
+              category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing',
               createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
               lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
               isLocked: metadata.customMetadata?.isLocked === 'true',
@@ -294,7 +298,7 @@ export default function FileManager() {
             parentFolder: folderPath.replace('files/', ''),
             size: metadata.size,
             lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-            category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo'
+            category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing'
         };
       });
 
@@ -311,7 +315,7 @@ export default function FileManager() {
               metadata = await getMetadata(placeholderRef);
             } catch (error) {
               // If placeholder doesn't exist, create a default metadata
-              metadata = { customMetadata: { category: 'includes_coo' } };
+              metadata = { customMetadata: { category: 'contracts' } };
             }
             
             const folderItem = {
@@ -320,7 +324,7 @@ export default function FileManager() {
         path: prefix.fullPath,
         type: 'folder' as const,
               parentFolder: folderPath.replace('files/', ''),
-              category: metadata.customMetadata?.category as 'includes_coo' | 'without_coo',
+              category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing',
               createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
               lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined
             };
@@ -348,63 +352,118 @@ export default function FileManager() {
   }, []);
 
   // Handle search
+  const handleSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      const searchQuery = query.toLowerCase();
+      const allFiles: FileItem[] = [];
+
+      // Function to recursively search through folders
+      const searchFolder = async (folderPath: string) => {
+        const folderRef = ref(storage, folderPath);
+        const result = await listAll(folderRef);
+
+        // Process files in current folder
+        const filePromises = result.items.map(async (item) => {
+          try {
+            const url = await getDownloadURL(item);
+            const metadata = await getMetadata(item);
+            const fileName = item.name.toLowerCase();
+            const fileCategory = metadata.customMetadata?.category?.toLowerCase() || '';
+            
+            // Check if file matches search query in name or category
+            if (fileName.includes(searchQuery) || fileCategory.includes(searchQuery)) {
+              const fileItem: FileItem = {
+                name: item.name,
+                url,
+                path: item.fullPath,
+                type: 'file',
+                parentFolder: folderPath.replace('files/', ''),
+                size: metadata.size,
+                lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+                category: metadata.customMetadata?.category as FileItem['category']
+              };
+              return fileItem;
+            }
+            return null;
+          } catch (error) {
+            console.error('Error processing file:', error);
+            return null;
+          }
+        });
+
+        // Process subfolders
+        const subfolderPromises = result.prefixes.map(async (prefix) => {
+          try {
+            const folderName = prefix.name.toLowerCase();
+            // Get folder metadata from the .placeholder file
+            const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
+            let folderCategory = 'contracts'; // Default category
+            try {
+              const placeholderMetadata = await getMetadata(placeholderRef);
+              folderCategory = placeholderMetadata.customMetadata?.category || 'contracts';
+            } catch (error) {
+              console.log('No placeholder file found, using default category');
+            }
+
+            // Check if folder matches search query in name or category
+            if (folderName.includes(searchQuery) || folderCategory.toLowerCase().includes(searchQuery)) {
+              const folderItem: FileItem = {
+                name: prefix.name,
+                url: '',
+                path: prefix.fullPath,
+                type: 'folder',
+                parentFolder: folderPath.replace('files/', ''),
+                category: folderCategory as FileItem['category']
+              };
+              allFiles.push(folderItem);
+            }
+            await searchFolder(prefix.fullPath);
+          } catch (error) {
+            console.error('Error processing folder:', error);
+          }
+        });
+
+        const files = await Promise.all(filePromises);
+        const validFiles = files.filter((file): file is FileItem => file !== null);
+        allFiles.push(...validFiles);
+        await Promise.all(subfolderPromises);
+      };
+
+      // Start search from the root 'files' directory
+      await searchFolder('files');
+      setSearchResults(allFiles);
+    } catch (error) {
+      console.error('Error during search:', error);
+      toast.error('Failed to perform search');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Update the search input onChange handler
+  const debouncedSearch = useCallback(
+    debounce((query: string) => {
+      handleSearch(query);
+    }, 300),
+    []
+  );
+
   useEffect(() => {
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      console.log('Searching for:', query);
-      console.log('All files count:', allFiles.length);
-      
-      // First try to find matches in the current directory
-      const currentDirMatches = files.filter(item => 
-        item.name.toLowerCase().includes(query)
-      );
-      
-      // Then find matches in all files and folders recursively
-      const allMatches = allFiles.filter(item => {
-        const nameMatch = item.name.toLowerCase().includes(query);
-        const pathMatch = item.path.toLowerCase().includes(query);
-        const parentMatch = item.parentFolder.toLowerCase().includes(query);
-        
-        // For folders, also check if any of their contents match
-        if (item.type === 'folder') {
-          const folderContents = allFiles.filter(file => 
-            file.path.startsWith(item.path + '/') && 
-            (file.name.toLowerCase().includes(query) || file.path.toLowerCase().includes(query))
-          );
-          return nameMatch || pathMatch || parentMatch || folderContents.length > 0;
-        }
-        
-        return nameMatch || pathMatch || parentMatch;
-      });
-      
-      // Combine results, prioritizing current directory matches
-      const results = [...currentDirMatches, ...allMatches.filter(item => 
-        !currentDirMatches.some(match => match.path === item.path)
-      )];
-      
-      console.log('Search results count:', results.length);
-      setSearchResults(results);
+    if (searchQuery) {
+      debouncedSearch(searchQuery);
     } else {
       setSearchResults([]);
     }
-  }, [searchQuery, allFiles, files]);
+  }, [searchQuery, debouncedSearch]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
-    // Check if current folder is locked
-    if (currentFolder) {
-      const folderRef = ref(storage, `files/${currentFolder}/.placeholder`);
-      try {
-        const metadata = await getMetadata(folderRef);
-        if (metadata.customMetadata?.isLocked === 'true') {
-          toast.error('Cannot upload to a locked folder');
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking folder lock status:', error);
-      }
-    }
     
     try {
     setUploading(true);
@@ -420,33 +479,16 @@ export default function FileManager() {
       
       const uploadPromises = Array.from(e.target.files).map(async (file) => {
         try {
-          // Sanitize the filename to prevent path traversal but preserve spaces
           const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
-          
-          // Always ensure we're within the 'files/' directory
           const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
     const fileRef = ref(storage, filePath);
 
-          // Get the current folder's category
-          let folderCategory: 'includes_coo' | 'without_coo' = 'includes_coo';
-          if (currentFolder) {
-            const placeholderRef = ref(storage, `files/${currentFolder}/.placeholder`);
-            try {
-              const metadata = await retryOperation(() => getMetadata(placeholderRef));
-              folderCategory = (metadata.customMetadata?.category as 'includes_coo' | 'without_coo') || 'includes_coo';
-            } catch (error) {
-              console.error('Error getting folder category:', error);
-            }
-          }
-          
-          // Upload the file with progress tracking
           const uploadTask = uploadBytesResumable(fileRef, file, {
             customMetadata: {
-              category: folderCategory
+              category: selectedCategory
             }
           });
           
-          // Add the upload task to the array
           uploadTasksArray.push(uploadTask);
           
           return new Promise((resolve, reject) => {
@@ -455,15 +497,13 @@ export default function FileManager() {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                 setUploadProgress(progress);
                 
-                // Calculate upload speed
           const now = Date.now();
-          const timeDiff = (now - lastUpdateTime.current) / 1000; // in seconds
+                const timeDiff = (now - lastUpdateTime.current) / 1000;
                 if (timeDiff > 0) {
           const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
-                  const speed = bytesDiff / timeDiff; // bytes per second
+                  const speed = bytesDiff / timeDiff;
           setUploadSpeed(speed);
           
-          // Calculate time remaining
           const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
           const remainingTime = remainingBytes / speed;
           setTimeRemaining(remainingTime);
@@ -477,7 +517,6 @@ export default function FileManager() {
           console.error('Error uploading file:', error);
                 if (error.code === 'storage/retry-limit-exceeded') {
                   try {
-                    // Try to resume the upload
                     await retryOperation(async () => {
                       uploadTask.resume();
                       return Promise.resolve();
@@ -505,7 +544,7 @@ export default function FileManager() {
                     parentFolder: currentFolder || 'root',
                     size: file.size,
                     lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-                    category: folderCategory
+                    category: selectedCategory === 'all' ? undefined : selectedCategory
                   };
                   resolve(newFile);
                 } catch (error) {
@@ -528,8 +567,6 @@ export default function FileManager() {
       if (successfulUploads.length > 0) {
         setFiles(prevFiles => [...prevFiles, ...successfulUploads]);
         toast.success(`Successfully uploaded ${successfulUploads.length} file(s)`);
-        
-        // Dispatch event to notify StorageDashboard
         window.dispatchEvent(new Event('filesUploaded'));
       }
     } catch (error) {
@@ -542,7 +579,6 @@ export default function FileManager() {
       setTimeRemaining(0);
       setTotalSize(0);
       setUploadTasks([]);
-      // Reset the file input
       if (e.target) {
         e.target.value = '';
       }
@@ -685,7 +721,7 @@ export default function FileManager() {
           path: newPath,
           name: newFileName,
           type: 'folder',
-          category: editingItem.category || 'includes_coo',
+          category: editingItem.category || 'contracts',
           createdAt: editingItem.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }));
@@ -696,7 +732,7 @@ export default function FileManager() {
         await retryOperation(async () => {
           await uploadBytesResumable(newPlaceholderRef, emptyBlob, {
             customMetadata: {
-              category: editingItem.category || 'includes_coo'
+              category: editingItem.category || 'contracts'
             }
           });
         });
@@ -730,7 +766,7 @@ export default function FileManager() {
             name: file.name,
             type: 'file',
             size: file.size,
-            category: file.category || 'includes_coo',
+            category: file.category || 'contracts',
             createdAt: file.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
           }));
@@ -777,7 +813,7 @@ export default function FileManager() {
           type: 'file',
           size: metadata.size,
           contentType: metadata.contentType,
-          category: metadata.customMetadata?.category || 'includes_coo',
+          category: metadata.customMetadata?.category || 'contracts',
           createdAt: metadata.timeCreated,
           updatedAt: new Date().toISOString()
         }));
@@ -966,6 +1002,9 @@ export default function FileManager() {
         return;
       }
       
+      // Reset category to "All Files" before navigating up
+      setSelectedCategory('all');
+      
       const parentPath = currentFolder.split('/').slice(0, -1).join('/');
       // Record folder access
       try {
@@ -1057,8 +1096,8 @@ export default function FileManager() {
     
     setSelectedFolder(folder);
     setNewFolderName('');
-    // Inherit the parent folder's category
-    setNewFolderCategory(folder.category || 'includes_coo');
+    // Inherit the parent folder's category, defaulting to 'includes_coo' if not set
+    setNewFolderCategory(folder.category === 'includes_coo' || folder.category === 'without_coo' ? folder.category : 'includes_coo');
     setShowNewSubFolderModal(true);
   };
 
@@ -1441,11 +1480,353 @@ export default function FileManager() {
             {item.isLocked ? (
               <FiLock className="w-5 h-5 text-red-500" />
             ) : (
-              <FiUnlock className="w-5 h-5 text-green-500" />
+              <FiUnlock className="w-5 h-5 text-blue-500" />
             )}
           </button>
         )}
-        <FiFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} ${(isAdmin || canLock) ? 'text-green-500' : (item.isLocked ? 'text-red-500' : 'text-green-500')}`} />
+        <FaFolder className={`${viewMode === 'grid' ? 'w-12 h-12 mb-2' : 'w-6 h-6'} ${(isAdmin || canLock) ? 'text-blue-500' : (item.isLocked ? 'text-red-500' : 'text-blue-500')}`} />
+      </div>
+    );
+  };
+
+  const UploadModal = () => {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        setSelectedFiles(Array.from(e.target.files));
+      }
+    };
+
+    const handleUpload = async () => {
+      if (selectedFiles.length === 0) {
+        toast.error('Please select at least one file to upload');
+        return;
+      }
+
+      try {
+        setUploading(true);
+        setUploadProgress(0);
+        setUploadSpeed(0);
+        setTimeRemaining(0);
+        setTotalSize(0);
+        lastUploadedBytes.current = 0;
+        lastUpdateTime.current = Date.now();
+        
+        const uploadTasksArray: UploadTask[] = [];
+        setUploadTasks(uploadTasksArray);
+        
+        // Close the modal immediately when upload starts
+        setShowUploadModal(false);
+        
+        const uploadPromises = selectedFiles.map(async (file) => {
+          try {
+            const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9 .-]/g, '_');
+            const filePath = currentFolder ? `files/${currentFolder}/${sanitizedFileName}` : `files/${sanitizedFileName}`;
+            const fileRef = ref(storage, filePath);
+
+            const uploadTask = uploadBytesResumable(fileRef, file, {
+              customMetadata: {
+                category: uploadCategory
+              }
+            });
+            
+            uploadTasksArray.push(uploadTask);
+            
+            return new Promise((resolve, reject) => {
+              uploadTask.on('state_changed',
+                (snapshot) => {
+                  const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                  setUploadProgress(progress);
+                  
+                  const now = Date.now();
+                  const timeDiff = (now - lastUpdateTime.current) / 1000;
+                  if (timeDiff > 0) {
+                    const bytesDiff = snapshot.bytesTransferred - lastUploadedBytes.current;
+                    const speed = bytesDiff / timeDiff;
+                    setUploadSpeed(speed);
+                    
+                    const remainingBytes = snapshot.totalBytes - snapshot.bytesTransferred;
+                    const remainingTime = remainingBytes / speed;
+                    setTimeRemaining(remainingTime);
+                  }
+                  
+                  lastUploadedBytes.current = snapshot.bytesTransferred;
+                  lastUpdateTime.current = now;
+                  setTotalSize(snapshot.totalBytes);
+                },
+                async (error) => {
+                  console.error('Error uploading file:', error);
+                  if (error.code === 'storage/retry-limit-exceeded') {
+                    try {
+                      await retryOperation(async () => {
+                        uploadTask.resume();
+                        return Promise.resolve();
+                      });
+                    } catch (retryError) {
+                      console.error('Failed to resume upload:', retryError);
+                      toast.error(`Failed to upload ${file.name} after retries`);
+                      reject(retryError);
+                    }
+                  } else {
+                    toast.error(`Failed to upload ${file.name}`);
+                    reject(error);
+                  }
+                },
+                async () => {
+                  try {
+                    const url = await retryOperation(() => getDownloadURL(fileRef));
+                    const metadata = await retryOperation(() => getMetadata(fileRef));
+                    
+                    const newFile: FileItem = {
+                      name: file.name,
+                      url,
+                      path: filePath,
+                      type: 'file',
+                      parentFolder: currentFolder || 'root',
+                      size: file.size,
+                      lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+                      category: uploadCategory as 'includes_coo' | 'without_coo' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' | undefined
+                    };
+                    resolve(newFile);
+                  } catch (error) {
+                    console.error('Error getting file metadata:', error);
+                    reject(error);
+                  }
+                }
+              );
+            });
+          } catch (error) {
+            console.error('Error uploading file:', error);
+            toast.error(`Failed to upload ${file.name}`);
+            return null;
+          }
+        });
+        
+        const uploadedFiles = await Promise.all(uploadPromises);
+        const successfulUploads = uploadedFiles.filter((file): file is FileItem => file !== null);
+        
+        if (successfulUploads.length > 0) {
+          setFiles(prevFiles => [...prevFiles, ...successfulUploads]);
+          toast.success(`Successfully uploaded ${successfulUploads.length} file(s)`);
+          window.dispatchEvent(new Event('filesUploaded'));
+        }
+      } catch (error) {
+        console.error('Error during upload:', error);
+        toast.error('Failed to upload files');
+      } finally {
+        setUploading(false);
+        setUploadProgress(0);
+        setUploadSpeed(0);
+        setTimeRemaining(0);
+        setTotalSize(0);
+        setUploadTasks([]);
+        setSelectedFiles([]);
+        setShowUploadModal(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-black">Upload Files</h2>
+            <button
+              onClick={() => {
+                setShowUploadModal(false);
+                setSelectedFiles([]);
+              }}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <FiX className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Files</label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+              <input
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="cursor-pointer flex flex-col items-center"
+              >
+                <FiUpload className="w-8 h-8 text-gray-400 mb-2" />
+                <span className="text-sm text-gray-600">
+                  Click to select files or drag and drop
+                </span>
+              </label>
+            </div>
+            {selectedFiles.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Selected Files:</h3>
+                <div className="max-h-40 overflow-y-auto">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between py-1">
+                      <span className="text-sm text-gray-600 truncate">{file.name}</span>
+                      <span className="text-xs text-gray-500">{formatBytes(file.size)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="contracts"
+                  checked={uploadCategory === 'contracts'}
+                  onChange={() => setUploadCategory('contracts')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="contracts" className="ml-2 text-sm text-gray-700">Contracts</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="certificate_of_occupancy"
+                  checked={uploadCategory === 'certificate_of_occupancy'}
+                  onChange={() => setUploadCategory('certificate_of_occupancy')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="certificate_of_occupancy" className="ml-2 text-sm text-gray-700">Certificate of Occupancy</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="case_files"
+                  checked={uploadCategory === 'case_files'}
+                  onChange={() => setUploadCategory('case_files')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="case_files" className="ml-2 text-sm text-gray-700">Case Files</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="court_filings"
+                  checked={uploadCategory === 'court_filings'}
+                  onChange={() => setUploadCategory('court_filings')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="court_filings" className="ml-2 text-sm text-gray-700">Court Filings</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="legal_memos"
+                  checked={uploadCategory === 'legal_memos'}
+                  onChange={() => setUploadCategory('legal_memos')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="legal_memos" className="ml-2 text-sm text-gray-700">Legal Memos</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="briefs"
+                  checked={uploadCategory === 'briefs'}
+                  onChange={() => setUploadCategory('briefs')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="briefs" className="ml-2 text-sm text-gray-700">Briefs</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="evidence_files"
+                  checked={uploadCategory === 'evidence_files'}
+                  onChange={() => setUploadCategory('evidence_files')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="evidence_files" className="ml-2 text-sm text-gray-700">Evidence Files</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="scanned_documents"
+                  checked={uploadCategory === 'scanned_documents'}
+                  onChange={() => setUploadCategory('scanned_documents')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="scanned_documents" className="ml-2 text-sm text-gray-700">Scanned Documents</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="invoices_billing"
+                  checked={uploadCategory === 'invoices_billing'}
+                  onChange={() => setUploadCategory('invoices_billing')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="invoices_billing" className="ml-2 text-sm text-gray-700">Invoices & Billing</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="property_ownership"
+                  checked={uploadCategory === 'property_ownership'}
+                  onChange={() => setUploadCategory('property_ownership')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="property_ownership" className="ml-2 text-sm text-gray-700">Property Ownership</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="title_deeds"
+                  checked={uploadCategory === 'title_deeds'}
+                  onChange={() => setUploadCategory('title_deeds')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="title_deeds" className="ml-2 text-sm text-gray-700">Title Deeds</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="lease_agreements"
+                  checked={uploadCategory === 'lease_agreements'}
+                  onChange={() => setUploadCategory('lease_agreements')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="lease_agreements" className="ml-2 text-sm text-gray-700">Lease Agreements</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="land_use_files"
+                  checked={uploadCategory === 'land_use_files'}
+                  onChange={() => setUploadCategory('land_use_files')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="land_use_files" className="ml-2 text-sm text-gray-700">Land Use Files</label>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => {
+                setShowUploadModal(false);
+                setSelectedFiles([]);
+              }}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={selectedFiles.length === 0 || uploading}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1470,12 +1851,33 @@ export default function FileManager() {
           <div className="flex items-center gap-2">
             <select
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value as 'all' | 'includes_coo' | 'without_coo')}
+              onChange={(e) => setSelectedCategory(e.target.value as 'all' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' | 'includes_coo' | 'without_coo')}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
             >
               <option value="all">All Files</option>
-              <option value="includes_coo">Includes C of O</option>
-              <option value="without_coo">Without C of O</option>
+              {!currentFolder ? (
+                <>
+                  <option value="includes_coo">Includes C of O</option>
+                  <option value="without_coo">Without C of O</option>
+                </>
+              ) : (
+                <>
+                  <option value="contracts">Contracts</option>
+                  <option value="certificate_of_occupancy">Certificate of Occupancy</option>
+                  <option value="case_files">Case Files</option>
+                  <option value="court_filings">Court Filings</option>
+                  <option value="legal_memos">Legal Memos</option>
+                  <option value="briefs">Briefs</option>
+                  <option value="client_correspondence">Client Correspondence</option>
+                  <option value="evidence_files">Evidence Files</option>
+                  <option value="scanned_documents">Scanned Documents</option>
+                  <option value="invoices_billing">Invoices & Billing</option>
+                  <option value="property_ownership">Property Ownership</option>
+                  <option value="title_deeds">Title Deeds</option>
+                  <option value="lease_agreements">Lease Agreements</option>
+                  <option value="land_use_files">Land Use Files</option>
+                </>
+              )}
             </select>
           </div>
               <button
@@ -1529,6 +1931,7 @@ export default function FileManager() {
                 </div>
               )}
               {currentFolder ? (
+                <>
                 <button
                   onClick={() => handleCreateSubFolder({ name: currentFolder, path: `files/${currentFolder}`, url: '', type: 'folder', parentFolder: '' })}
                   className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
@@ -1537,6 +1940,16 @@ export default function FileManager() {
                   <FiFolderPlus className="w-4 h-4" />
                   <span className="hidden sm:inline">New Sub-Folder</span>
                 </button>
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                    title="Upload file"
+                    disabled={uploading}
+                  >
+                    <FiUpload className="w-4 h-4" />
+                    <span className="hidden sm:inline">Upload</span>
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={() => setShowNewFolderInput(true)}
@@ -1547,16 +1960,6 @@ export default function FileManager() {
                   <span className="hidden sm:inline">New Folder</span>
                 </button>
               )}
-              <label className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer text-sm" title="Upload file">
-                <FiUpload className="w-4 h-4" />
-                <span className="hidden sm:inline">Upload</span>
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={handleUpload}
-                  disabled={uploading}
-                />
-              </label>
             </div>
           )}
           </div>
@@ -1640,6 +2043,11 @@ export default function FileManager() {
                           })}
                         </span>
                       ) : null}
+                      {item.category && (
+                        <span className="whitespace-nowrap bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
+                          {item.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </span>
+                      )}
                     </div>
                     {searchQuery && (
                       <div className="text-xs text-gray-500 truncate max-w-[200px]">
@@ -1915,6 +2323,8 @@ export default function FileManager() {
           {selectedItems.length} item(s) selected
         </div>
       )}
+
+      {showUploadModal && <UploadModal />}
     </div>
   );
 }
