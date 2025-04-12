@@ -122,7 +122,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       console.log('Logging out...');
+      // Clear the session cookie first
+      await fetch('/api/auth/session', { method: 'DELETE' });
+      // Then sign out from Firebase
       await signOut(auth);
+      // Clear local state
+      setUser(null);
       console.log('Logout successful');
     } catch (error) {
       console.error('Logout error:', error);

@@ -48,16 +48,19 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
-    // Clear the session cookie
-    const response = NextResponse.json({ status: 'success' });
-    response.cookies.delete('session');
-    
+    const response = new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': 'session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'
+      }
+    });
     return response;
   } catch (error) {
-    console.error('Session deletion error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete session' },
-      { status: 500 }
-    );
+    console.error('Error clearing session:', error);
+    return new Response(JSON.stringify({ error: 'Failed to clear session' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 } 
