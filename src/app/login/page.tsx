@@ -16,7 +16,8 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      router.push('/');
+      router.replace('/');
+      router.refresh();
     }
   }, [user, router]);
 
@@ -27,7 +28,8 @@ export default function Login() {
       setLoading(true);
       await login(email, password);
       toast.success('Logged in successfully');
-      router.push('/');
+      router.replace('/');
+      router.refresh();
     } catch (error: unknown) {
       console.error('Login error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to log in');
