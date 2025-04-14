@@ -22,30 +22,20 @@ if (missingConfigs.length > 0) {
   throw new Error(`Missing Firebase configuration: ${missingConfigs.join(', ')}`);
 }
 
-// Initialize Firebase
-let app;
-try {
-  console.log('Initializing Firebase client app with config:', {
-    ...firebaseConfig,
-    apiKey: firebaseConfig.apiKey ? '***' : undefined,
-  });
-  app = initializeApp(firebaseConfig);
-  console.log('Firebase client app initialized successfully');
-  
-  // Set persistence to session
-  const auth = getAuth(app);
-  setPersistence(auth, browserSessionPersistence)
-    .then(() => {
-      console.log('Firebase persistence set to session');
-    })
-    .catch((error) => {
-      console.error('Error setting persistence:', error);
-    });
-} catch (error) {
-  console.error('Error initializing Firebase client app:', error);
-  throw error;
-}
+// Initialize Firebase and Auth
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
-export const auth = getAuth(app);
-export const storage = getStorage(app);
-export const db = getFirestore(app); 
+// Set session-based persistence
+setPersistence(auth, browserSessionPersistence)
+  .then(() => {
+    console.log('Firebase auth persistence set to session');
+  })
+  .catch((error) => {
+    console.error('Error setting Firebase auth persistence:', error);
+  });
+
+const storage = getStorage(app);
+const db = getFirestore(app);
+
+export { app, auth, storage, db };
