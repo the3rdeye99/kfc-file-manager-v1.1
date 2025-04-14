@@ -1,16 +1,16 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { 
+import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   setPersistence,
-  browserSessionPersistence
+  browserSessionPersistence,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { getFirebaseAuth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -29,17 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Check if there's a session cookie
+    const auth = getFirebaseAuth();
+
     const checkSession = async () => {
       try {
-        console.log('Checking session...');
         const response = await fetch('/api/auth/check-session');
         if (!response.ok) {
-          console.log('Session check failed, signing out user');
           await signOut(auth);
           setUser(null);
-        } else {
-          console.log('Session check passed');
         }
       } catch (error) {
         console.error('Error checking session:', error);
@@ -50,32 +47,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Check the session on mount
     checkSession();
 
-    // Set up auth state listener
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          // Get the ID token
           const idToken = await user.getIdToken();
-          console.log('Got ID token, creating session...');
-          
-          // Send the token to your backend to create a session
+
           const response = await fetch('/api/auth/session', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken }),
           });
 
           if (!response.ok) {
-            console.error('Failed to create session:', await response.text());
             await signOut(auth);
             setUser(null);
           } else {
-            console.log('Session created successfully');
             setUser(user);
           }
         } catch (error) {
@@ -85,14 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         try {
-          console.log('Clearing session...');
-          // Clear the session cookie when user logs out
           await fetch('/api/auth/session', { method: 'DELETE' });
           setUser(null);
         } catch (error) {
           console.error('Error clearing session:', error);
         }
       }
+
       setLoading(false);
     });
 
@@ -100,29 +87,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    const auth = getFirebaseAuth();
+
     try {
-      // Set persistence to session before signing in
       await setPersistence(auth, browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Get the ID token
       const idToken = await userCredential.user.getIdToken();
-      
-      // Create session
+
       const response = await fetch('/api/auth/session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create session');
-      }
+      if (!response.ok) throw new Error('Failed to create session');
 
       setUser(userCredential.user);
-      router.push('/'); // Redirect to home page after successful login
+      router.push('/');
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -130,7 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signup = async (email: string, password: string) => {
+    const auth = getFirebaseAuth();
+
     try {
+      await setPersistence(auth, browserSessionPersistence);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       setUser(userCredential.user);
     } catch (error) {
@@ -140,12 +124,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    const auth = getFirebaseAuth();
+
     try {
-      // Clear the session cookie
       await fetch('/api/auth/session', { method: 'DELETE' });
       await signOut(auth);
       setUser(null);
-      router.push('/login'); // Redirect to login page after logout
+      router.push('/login');
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
@@ -159,4 +144,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext); 
+export const useAuth = () => useContext(AuthContext);
