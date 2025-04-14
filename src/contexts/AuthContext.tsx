@@ -27,25 +27,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribe: () => void;
-
-    const checkSessionAndAuth = async () => {
+    // Check if there's a session cookie
+    const checkSession = async () => {
       try {
         console.log('Checking session...');
         const response = await fetch('/api/auth/check-session');
-
         if (!response.ok) {
           console.log('Session check failed, signing out user');
           await signOut(auth);
           setUser(null);
         } else {
           console.log('Session check passed');
-
-          // Only set up listener AFTER confirming session
-          unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            setLoading(false);
-          });
         }
       } catch (error) {
         console.error('Error checking session:', error);
@@ -56,11 +48,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    checkSessionAndAuth();
+    // Check the session on mount
+    checkSession();
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    // Set up auth state listener
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -102,4 +99,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext); 
