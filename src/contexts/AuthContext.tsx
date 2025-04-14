@@ -11,6 +11,7 @@ import {
   browserSessionPersistence
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     // Check if there's a session cookie
@@ -52,8 +54,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
 
     // Set up auth state listener
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          // Get the ID token
+          const idToken = await user.getIdToken();
+          console.log('Got ID token, creating session...');
+          
+          // Send the token to your backend to create a session
+          const response = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ idToken }),
+          });
+
+          if (!response.ok) {
+            console.error('Failed to create session:', await response.text());
+            await signOut(auth);
+            setUser(null);
+          } else {
+            console.log('Session created successfully');
+            setUser(user);
+          }
+        } catch (error) {
+          console.error('Error creating session:', error);
+          await signOut(auth);
+          setUser(null);
+        }
+      } else {
+        try {
+          console.log('Clearing session...');
+          // Clear the session cookie when user logs out
+          await fetch('/api/auth/session', { method: 'DELETE' });
+          setUser(null);
+        } catch (error) {
+          console.error('Error clearing session:', error);
+        }
+      }
       setLoading(false);
     });
 
@@ -65,7 +104,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Set persistence to session before signing in
       await setPersistence(auth, browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Get the ID token
+      const idToken = await userCredential.user.getIdToken();
+      
+      // Create session
+      const response = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
+
       setUser(userCredential.user);
+      router.push('/'); // Redirect to home page after successful login
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -84,8 +141,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      // Clear the session cookie
+      await fetch('/api/auth/session', { method: 'DELETE' });
       await signOut(auth);
       setUser(null);
+      router.push('/login'); // Redirect to login page after logout
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
