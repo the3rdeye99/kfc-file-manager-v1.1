@@ -1857,8 +1857,8 @@ export default function FileManager() {
               <option value="all">All Files</option>
               {!currentFolder ? (
                 <>
-                  <option value="includes_coo">Includes C of O</option>
-                  <option value="without_coo">Without C of O</option>
+              <option value="includes_coo">Includes C of O</option>
+              <option value="without_coo">Without C of O</option>
                 </>
               ) : (
                 <>
