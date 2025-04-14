@@ -18,7 +18,7 @@ interface FileItem {
   parentFolder: string;
   size?: number;
   lastModified?: number;
-  category?: 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing' | 'includes_coo' | 'without_coo';
+  category?: 'none' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'scanned_documents' | 'invoices_billing' | 'certificate_of_occupancy' | 'evidence_files' | 'property_ownership' | 'title_deeds' | 'lease_agreements' | 'land_use_files' | 'client_correspondence' | 'includes_coo' | 'without_coo' | 'evidence_documents';
   createdAt?: number;
   isLocked?: boolean;
   lockedBy?: string;
@@ -120,6 +120,7 @@ export default function FileManager() {
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const { user } = useAuth();
   const [userRole, setUserRole] = useState<string>('viewer');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -146,7 +147,9 @@ export default function FileManager() {
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [uploadCategory, setUploadCategory] = useState<'contracts' | 'certificate_of_occupancy' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'evidence_files' | 'invoices_billing' | 'scanned_documents' | 'property_ownership' | 'title_deeds' | 'lease_agreements' | 'land_use_files'>('contracts');
+  const [uploadCategory, setUploadCategory] = useState<'none' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'scanned_documents' | 'invoices_billing' | 'certificate_of_occupancy' | 'evidence_files' | 'property_ownership' | 'title_deeds' | 'lease_agreements' | 'land_use_files'>('none');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -639,7 +642,12 @@ export default function FileManager() {
     if (file.type === 'folder') {
       handleFolderClick(file);
     } else {
+      // Don't open preview if clicking on category dropdown
+      if (showCategoryDropdown === file.path) {
+        return;
+      }
       try {
+        setIsPreviewLoading(true);
         // Record file access
         try {
           const response = await fetch('/api/file-access-history', {
@@ -663,9 +671,15 @@ export default function FileManager() {
 
         // Set the file for preview
         setPreviewFile(file);
+        
+        // Add a small delay to ensure loading indicator is visible
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setIsPreviewLoading(false);
       } catch (error) {
         console.error('Error accessing file:', error);
         toast.error('Failed to access file');
+        setIsPreviewLoading(false);
       }
     }
   };
@@ -908,6 +922,15 @@ export default function FileManager() {
             </div>
           </div>
           <div className="p-4 h-[calc(90vh-4rem)] overflow-auto">
+            {isPreviewLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                  <p className="text-gray-600">Loading preview...</p>
+                </div>
+              </div>
+            ) : (
+              <>
             {isEditingContent ? (
               <div className="h-full flex flex-col">
                 <textarea
@@ -980,6 +1003,8 @@ export default function FileManager() {
                 </a>
                     )}
               </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -1674,139 +1699,30 @@ export default function FileManager() {
             )}
           </div>
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="contracts"
-                  checked={uploadCategory === 'contracts'}
-                  onChange={() => setUploadCategory('contracts')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="contracts" className="ml-2 text-sm text-gray-700">Contracts</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="certificate_of_occupancy"
-                  checked={uploadCategory === 'certificate_of_occupancy'}
-                  onChange={() => setUploadCategory('certificate_of_occupancy')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="certificate_of_occupancy" className="ml-2 text-sm text-gray-700">Certificate of Occupancy</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="case_files"
-                  checked={uploadCategory === 'case_files'}
-                  onChange={() => setUploadCategory('case_files')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="case_files" className="ml-2 text-sm text-gray-700">Case Files</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="court_filings"
-                  checked={uploadCategory === 'court_filings'}
-                  onChange={() => setUploadCategory('court_filings')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="court_filings" className="ml-2 text-sm text-gray-700">Court Filings</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="legal_memos"
-                  checked={uploadCategory === 'legal_memos'}
-                  onChange={() => setUploadCategory('legal_memos')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="legal_memos" className="ml-2 text-sm text-gray-700">Legal Memos</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="briefs"
-                  checked={uploadCategory === 'briefs'}
-                  onChange={() => setUploadCategory('briefs')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="briefs" className="ml-2 text-sm text-gray-700">Briefs</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="evidence_files"
-                  checked={uploadCategory === 'evidence_files'}
-                  onChange={() => setUploadCategory('evidence_files')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="evidence_files" className="ml-2 text-sm text-gray-700">Evidence Files</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="scanned_documents"
-                  checked={uploadCategory === 'scanned_documents'}
-                  onChange={() => setUploadCategory('scanned_documents')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="scanned_documents" className="ml-2 text-sm text-gray-700">Scanned Documents</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="invoices_billing"
-                  checked={uploadCategory === 'invoices_billing'}
-                  onChange={() => setUploadCategory('invoices_billing')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="invoices_billing" className="ml-2 text-sm text-gray-700">Invoices & Billing</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="property_ownership"
-                  checked={uploadCategory === 'property_ownership'}
-                  onChange={() => setUploadCategory('property_ownership')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="property_ownership" className="ml-2 text-sm text-gray-700">Property Ownership</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="title_deeds"
-                  checked={uploadCategory === 'title_deeds'}
-                  onChange={() => setUploadCategory('title_deeds')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="title_deeds" className="ml-2 text-sm text-gray-700">Title Deeds</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="lease_agreements"
-                  checked={uploadCategory === 'lease_agreements'}
-                  onChange={() => setUploadCategory('lease_agreements')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="lease_agreements" className="ml-2 text-sm text-gray-700">Lease Agreements</label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="land_use_files"
-                  checked={uploadCategory === 'land_use_files'}
-                  onChange={() => setUploadCategory('land_use_files')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="land_use_files" className="ml-2 text-sm text-gray-700">Land Use Files</label>
-              </div>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category
+            </label>
+            <select
+              value={uploadCategory}
+              onChange={(e) => setUploadCategory(e.target.value as typeof uploadCategory)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+            >
+              <option value="none">None</option>
+              <option value="contracts">Contracts</option>
+              <option value="certificate_of_occupancy">Certificate of Occupancy</option>
+              <option value="case_files">Case Files</option>
+              <option value="court_filings">Court Filings</option>
+              <option value="legal_memos">Legal Memos</option>
+              <option value="briefs">Briefs</option>
+              <option value="client_correspondence">Client Correspondence</option>
+              <option value="evidence_files">Evidence Files</option>
+              <option value="scanned_documents">Scanned Documents</option>
+              <option value="invoices_billing">Invoices & Billing</option>
+              <option value="property_ownership">Property Ownership</option>
+              <option value="title_deeds">Title Deeds</option>
+              <option value="lease_agreements">Lease Agreements</option>
+              <option value="land_use_files">Land Use Files</option>
+            </select>
           </div>
           <div className="flex justify-end gap-3">
             <button
@@ -1829,6 +1745,90 @@ export default function FileManager() {
         </div>
       </div>
     );
+  };
+
+  const renderCategoryDropdown = (item: FileItem) => {
+    if (showCategoryDropdown !== item.path || !isAdmin) return null;
+
+    const categories = [
+      'none',
+      'contracts',
+      'case_files',
+      'court_filings',
+      'legal_memos',
+      'briefs',
+      'scanned_documents',
+      'invoices_billing',
+      'certificate_of_occupancy',
+      'evidence_files',
+      'property_ownership',
+      'title_deeds',
+      'lease_agreements',
+      'land_use_files'
+    ];
+
+    return (
+      <div 
+        className="fixed z-50 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200"
+        style={{ 
+          maxHeight: '200px', 
+          overflowY: 'auto',
+          position: 'fixed',
+          top: 'auto',
+          bottom: '0',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          marginBottom: '1rem'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="py-1">
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                item.category === category ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCategoryChange(item.path, category);
+                setShowCategoryDropdown(null);
+              }}
+            >
+              {category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const handleCategoryChange = async (filePath: string, newCategory: string) => {
+    if (!isAdmin) {
+      toast.error('Only administrators can change file categories');
+      return;
+    }
+
+    // Check if the file is a .placeholder file
+    if (filePath.endsWith('/.placeholder')) {
+      toast.error('Cannot change category of folder placeholder files');
+      return;
+    }
+
+    try {
+      const fileRef = ref(storage, filePath);
+      const metadata = {
+        customMetadata: {
+          category: newCategory
+        }
+      };
+      await updateMetadata(fileRef, metadata);
+      toast.success('Category updated successfully');
+      loadFiles();
+    } catch (error) {
+      console.error('Error updating category:', error);
+      toast.error('Failed to update category');
+    }
   };
 
   return (
@@ -2043,10 +2043,35 @@ export default function FileManager() {
                           })}
                         </span>
                       ) : null}
-                      {item.category && (
-                        <span className="whitespace-nowrap bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
-                          {item.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
+                      {item.type === 'file' && (
+                        <div className="relative">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              item.category === 'none' ? 'bg-gray-100 text-gray-800' :
+                              item.category === 'contracts' ? 'bg-blue-100 text-blue-800' :
+                              item.category === 'case_files' ? 'bg-green-100 text-green-800' :
+                              item.category === 'court_filings' ? 'bg-purple-100 text-purple-800' :
+                              item.category === 'legal_memos' ? 'bg-yellow-100 text-yellow-800' :
+                              item.category === 'briefs' ? 'bg-indigo-100 text-indigo-800' :
+                              item.category === 'scanned_documents' ? 'bg-pink-100 text-pink-800' :
+                              item.category === 'invoices_billing' ? 'bg-red-100 text-red-800' :
+                              item.category === 'certificate_of_occupancy' ? 'bg-orange-100 text-orange-800' :
+                              item.category === 'evidence_files' ? 'bg-teal-100 text-teal-800' :
+                              item.category === 'property_ownership' ? 'bg-cyan-100 text-cyan-800' :
+                              item.category === 'title_deeds' ? 'bg-lime-100 text-lime-800' :
+                              item.category === 'lease_agreements' ? 'bg-amber-100 text-amber-800' :
+                              'bg-gray-100 text-gray-800'
+                            } ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+                            onClick={(e) => {
+                              if (!isAdmin) return;
+                              e.stopPropagation();
+                              setShowCategoryDropdown(showCategoryDropdown === item.path ? null : item.path);
+                            }}
+                          >
+                            {item.category ? item.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'None'}
+                          </span>
+                          {renderCategoryDropdown(item)}
+                        </div>
                       )}
                     </div>
                     {searchQuery && (
