@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       sameSite: 'lax',
-      session: true // This makes it a session cookie
+      maxAge: 60 * 60 * 24 * 5 // 5 days (optional if you want it to persist)
     });
 
     return response;
