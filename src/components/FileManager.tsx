@@ -150,6 +150,10 @@ export default function FileManager() {
   const [uploadCategory, setUploadCategory] = useState<'none' | 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'scanned_documents' | 'invoices_billing' | 'certificate_of_occupancy' | 'evidence_files' | 'property_ownership' | 'title_deeds' | 'lease_agreements' | 'land_use_files'>('none');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -1831,6 +1835,34 @@ export default function FileManager() {
     }
   };
 
+  // Add pagination functions
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (value: number) => {
+    setItemsPerPage(value);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
+  // Update the filtered items to include pagination
+  const paginatedItems = (searchQuery ? searchResults : files)
+    .filter(item => {
+      if (selectedCategory === 'all') return true;
+      return item.category === selectedCategory;
+    })
+    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Calculate total pages
+  useEffect(() => {
+    const filteredItems = (searchQuery ? searchResults : files)
+      .filter(item => {
+        if (selectedCategory === 'all') return true;
+        return item.category === selectedCategory;
+      });
+    setTotalPages(Math.ceil(filteredItems.length / itemsPerPage));
+  }, [files, searchResults, searchQuery, selectedCategory, itemsPerPage]);
+
   return (
     <div className="w-full">
       <div className="bg-white rounded-lg shadow-md p-4">
@@ -1845,6 +1877,31 @@ export default function FileManager() {
                 Back
               </button>
             )}
+          </div>
+        </div>
+        {/* Make breadcrumb path sticky */}
+        <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <button
+              onClick={() => navigateToFolder('')}
+              className="hover:text-blue-500"
+            >
+              Root
+            </button>
+            {currentFolder.split('/').map((folder, index, array) => {
+              const path = array.slice(0, index + 1).join('/');
+              return (
+                <div key={path} className="flex items-center gap-2">
+                  <span>/</span>
+                  <button
+                    onClick={() => navigateToFolder(path)}
+                    className="hover:text-blue-500"
+                  >
+                    {folder}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1984,8 +2041,8 @@ export default function FileManager() {
             </div>
           )}
           <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
-          {filteredItems.length > 0 ? (
-            filteredItems.map((item) => (
+          {paginatedItems.length > 0 ? (
+            paginatedItems.map((item) => (
               <div
                 key={item.path}
                 className={`${
@@ -2141,7 +2198,50 @@ export default function FileManager() {
               </p>
             )}
           </div>
+
+        {/* Add pagination controls */}
+        <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Items per page:</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+              className="px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-black"
+            >
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`px-3 py-1 rounded-lg ${
+                currentPage === 1
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+              }`}
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`px-3 py-1 rounded-lg ${
+                currentPage === totalPages
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+              }`}
+            >
+              Next
+            </button>
+          </div>
         </div>
+      </div>
       {renderPreview()}
 
       {/* New Folder Modal */}
