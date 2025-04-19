@@ -236,9 +236,6 @@ export default function StorageDashboard() {
   useEffect(() => {
     calculateStorageStats();
 
-    // Set up an interval to refresh stats every 30 seconds
-    const intervalId = setInterval(calculateStorageStats, 30000);
-
     // Listen for file operation events
     const handleFileOperation = () => {
       console.log('File operation detected, refreshing storage stats');
@@ -249,15 +246,14 @@ export default function StorageDashboard() {
     window.addEventListener('fileUploaded', handleFileOperation);
     window.addEventListener('fileDeleted', handleFileOperation);
     window.addEventListener('folderCreated', handleFileOperation);
-    window.addEventListener('folderDeleted', handleFileOperation);
+    window.addEventListener('filesDeleted', handleFileOperation);
 
+    // Cleanup event listeners
     return () => {
-      clearInterval(intervalId);
-      // Remove event listeners
       window.removeEventListener('fileUploaded', handleFileOperation);
       window.removeEventListener('fileDeleted', handleFileOperation);
       window.removeEventListener('folderCreated', handleFileOperation);
-      window.removeEventListener('folderDeleted', handleFileOperation);
+      window.removeEventListener('filesDeleted', handleFileOperation);
     };
   }, []);
 

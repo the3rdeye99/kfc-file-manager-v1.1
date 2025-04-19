@@ -411,9 +411,16 @@ export default function FileManager() {
             // Get folder metadata from the .placeholder file
             const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
             let folderCategory = 'contracts'; // Default category
+            let isLocked = false;
+            let lockedBy = '';
+            let lockedAt = '';
+            
             try {
               const placeholderMetadata = await getMetadata(placeholderRef);
               folderCategory = placeholderMetadata.customMetadata?.category || 'contracts';
+              isLocked = placeholderMetadata.customMetadata?.isLocked === 'true';
+              lockedBy = placeholderMetadata.customMetadata?.lockedBy || '';
+              lockedAt = placeholderMetadata.customMetadata?.lockedAt || '';
             } catch (error) {
               console.log('No placeholder file found, using default category');
             }
@@ -426,7 +433,10 @@ export default function FileManager() {
                 path: prefix.fullPath,
                 type: 'folder',
                 parentFolder: folderPath.replace('files/', ''),
-                category: folderCategory as FileItem['category']
+                category: folderCategory as FileItem['category'],
+                isLocked,
+                lockedBy,
+                lockedAt
               };
               allFiles.push(folderItem);
             }
@@ -1219,6 +1229,69 @@ export default function FileManager() {
       // Ensure we're within the 'files/' directory
       const safePath = folder.path.startsWith('files/') ? folder.path.replace('files/', '') : folder.path;
       setCurrentFolder(safePath);
+      
+      // Load folder contents immediately
+      const folderRef = ref(storage, folder.path);
+      const result = await listAll(folderRef);
+      
+      // Process files in current folder
+      const filePromises = result.items.map(async (item) => {
+        const url = await getDownloadURL(item);
+        const metadata = await getMetadata(item);
+        return {
+          name: item.name,
+          url,
+          path: item.fullPath,
+          type: 'file' as const,
+          parentFolder: folder.path.replace('files/', ''),
+          size: metadata.size,
+          lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+          category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing'
+        };
+      });
+
+      // Process subfolders
+      const folderPromises = result.prefixes.map(async (prefix) => {
+        try {
+          const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
+          let metadata;
+          try {
+            metadata = await getMetadata(placeholderRef);
+          } catch (error) {
+            metadata = { customMetadata: { category: 'contracts' } };
+          }
+          
+          return {
+            name: prefix.name,
+            url: '',
+            path: prefix.fullPath,
+            type: 'folder' as const,
+            parentFolder: folder.path.replace('files/', ''),
+            category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing',
+            createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
+            lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+            isLocked: metadata.customMetadata?.isLocked === 'true',
+            lockedBy: metadata.customMetadata?.lockedBy,
+            lockedAt: metadata.customMetadata?.lockedAt
+          };
+        } catch (error) {
+          console.error(`Error processing folder ${prefix.fullPath}:`, error);
+          return null;
+        }
+      });
+
+      const [files, folders] = await Promise.all([
+        Promise.all(filePromises),
+        Promise.all(folderPromises)
+      ]);
+
+      const validFolders = folders.filter(folder => folder !== null) as FileItem[];
+      setAllFiles([...files, ...validFolders]);
+      
+      // Clear search query after successful navigation
+      setSearchQuery('');
+      setSearchResults([]);
+      setIsSearching(false);
     } catch (error) {
       console.error('Error accessing folder:', error);
       toast.error('Failed to access folder');
