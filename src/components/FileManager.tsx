@@ -2156,7 +2156,7 @@ export default function FileManager() {
                     </div>
                   )}
                   <div className={viewMode === 'grid' ? 'text-center' : ''}>
-                    <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[150px]'}`}>
+                    <div className={`font-medium text-black ${item.type === 'folder' ? '' : 'truncate max-w-[300px]'}`}>
                       {item.name}
                     </div>
                     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 text-xs text-gray-500">
