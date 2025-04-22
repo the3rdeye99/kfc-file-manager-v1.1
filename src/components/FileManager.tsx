@@ -1230,6 +1230,9 @@ export default function FileManager() {
       const safePath = folder.path.startsWith('files/') ? folder.path.replace('files/', '') : folder.path;
       setCurrentFolder(safePath);
       
+      // Reset pagination state
+      setCurrentPage(1);
+      
       // Load folder contents immediately
       const folderRef = ref(storage, folder.path);
       const result = await listAll(folderRef);
@@ -1286,7 +1289,11 @@ export default function FileManager() {
       ]);
 
       const validFolders = folders.filter(folder => folder !== null) as FileItem[];
-      setAllFiles([...files, ...validFolders]);
+      const allItems = [...files, ...validFolders];
+      
+      // Update both files and allFiles states
+      setFiles(allItems);
+      setAllFiles(allItems);
       
       // Clear search query after successful navigation
       setSearchQuery('');
