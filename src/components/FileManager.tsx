@@ -1226,6 +1226,9 @@ export default function FileManager() {
         // Continue with navigation even if history recording fails
       }
 
+      // Reset category filter when entering a folder
+      setSelectedCategory('all');
+
       // Ensure we're within the 'files/' directory
       const safePath = folder.path.startsWith('files/') ? folder.path.replace('files/', '') : folder.path;
       setCurrentFolder(safePath);
@@ -1959,29 +1962,55 @@ export default function FileManager() {
             )}
           </div>
         </div>
-        {/* Make breadcrumb path sticky */}
-        <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <button
-              onClick={() => navigateToFolder('')}
-              className="hover:text-blue-500"
-            >
-              Root
-            </button>
-            {currentFolder.split('/').map((folder, index, array) => {
-              const path = array.slice(0, index + 1).join('/');
-              return (
-                <div key={path} className="flex items-center gap-2">
-                  <span>/</span>
-                  <button
-                    onClick={() => navigateToFolder(path)}
-                    className="hover:text-blue-500"
-                  >
-                    {folder}
-                  </button>
+        {/* Make both breadcrumb and search sticky */}
+        <div className="sticky top-0 z-10 bg-white">
+          {/* Breadcrumb path */}
+          <div className="py-2 border-b">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <button
+                onClick={() => navigateToFolder('')}
+                className="hover:text-blue-500"
+              >
+                Root
+              </button>
+              {currentFolder.split('/').map((folder, index, array) => {
+                const path = array.slice(0, index + 1).join('/');
+                return (
+                  <div key={path} className="flex items-center gap-2">
+                    <span>/</span>
+                    <button
+                      onClick={() => navigateToFolder(path)}
+                      className="hover:text-blue-500"
+                    >
+                      {folder}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Search component */}
+          <div className="py-4 border-b">
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search files and folders..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              />
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                 </div>
-              );
-            })}
+              )}
+            </div>
+            {searchQuery && (
+              <div className="mt-2 text-sm text-gray-500">
+                Searching all folders for "{searchQuery}"...
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1994,8 +2023,8 @@ export default function FileManager() {
               <option value="all">All Files</option>
               {!currentFolder ? (
                 <>
-              <option value="includes_coo">Includes C of O</option>
-              <option value="without_coo">Without C of O</option>
+                  <option value="includes_coo">Includes C of O</option>
+                  <option value="without_coo">Without C of O</option>
                 </>
               ) : (
                 <>
@@ -2017,33 +2046,29 @@ export default function FileManager() {
               )}
             </select>
           </div>
-              <button
+          <button
             onClick={handleRefresh}
             className={`p-2 rounded ${isRefreshing ? 'bg-blue-100 text-blue-600 animate-spin' : 'text-gray-500 hover:text-gray-700'}`}
             disabled={isRefreshing}
             title="Refresh files"
           >
             <FiRefreshCw className="w-5 h-5" />
-                  </button>
+          </button>
           <div className="flex items-center gap-2">
-              <button
+            <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded ${
-                viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
-              }`}
+              className={`p-2 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'}`}
             >
               <FiGrid className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded ${
-                viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
-              }`}
+              className={`p-2 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-500'}`}
             >
               <FiList className="w-5 h-5" />
-              </button>
-            </div>
-              {isAdmin && (
+            </button>
+          </div>
+          {isAdmin && (
             <div className="flex items-center gap-2 ml-auto">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-black">Select multiple</span>
@@ -2069,14 +2094,14 @@ export default function FileManager() {
               )}
               {currentFolder ? (
                 <>
-                <button
-                  onClick={() => handleCreateSubFolder({ name: currentFolder, path: `files/${currentFolder}`, url: '', type: 'folder', parentFolder: '' })}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
-                  title="Create sub-folder"
-                >
-                  <FiFolderPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">New Sub-Folder</span>
-                </button>
+                  <button
+                    onClick={() => handleCreateSubFolder({ name: currentFolder, path: `files/${currentFolder}`, url: '', type: 'folder', parentFolder: '' })}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                    title="Create sub-folder"
+                  >
+                    <FiFolderPlus className="w-4 h-4" />
+                    <span className="hidden sm:inline">New Sub-Folder</span>
+                  </button>
                   <button
                     onClick={() => setShowUploadModal(true)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
@@ -2099,28 +2124,8 @@ export default function FileManager() {
               )}
             </div>
           )}
-          </div>
-        <div className="relative mb-4">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files and folders..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-            />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-          </div>
-          )}
         </div>
-        {searchQuery && (
-          <div className="mt-2 text-sm text-gray-500">
-            Searching all folders for "{searchQuery}"...
-            </div>
-          )}
-          <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
+        <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
           {paginatedItems.length > 0 ? (
             paginatedItems.map((item) => (
               <div
