@@ -1257,34 +1257,56 @@ export default function FileManager() {
       });
 
       // Process subfolders
-      const folderPromises = result.prefixes.map(async (prefix) => {
-        try {
-          const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
-          let metadata;
-          try {
-            metadata = await getMetadata(placeholderRef);
-          } catch (error) {
-            metadata = { customMetadata: { category: 'contracts' } };
-          }
-          
-          return {
-            name: prefix.name,
-            url: '',
-            path: prefix.fullPath,
-            type: 'folder' as const,
-            parentFolder: folder.path.replace('files/', ''),
-            category: metadata.customMetadata?.category as 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing',
-            createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
-            lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
-            isLocked: metadata.customMetadata?.isLocked === 'true',
-            lockedBy: metadata.customMetadata?.lockedBy,
-            lockedAt: metadata.customMetadata?.lockedAt
-          };
-        } catch (error) {
-          console.error(`Error processing folder ${prefix.fullPath}:`, error);
-          return null;
+      interface CustomMetadata {
+  category?: 'contracts' | 'case_files' | 'court_filings' | 'legal_memos' | 'briefs' | 'client_correspondence' | 'evidence_documents' | 'scanned_documents' | 'invoices_billing';
+  isLocked?: string;
+  lockedBy?: string;
+  lockedAt?: string;
+  [key: string]: string | undefined;
+}
+
+interface SafeMetadata {
+  customMetadata: CustomMetadata;
+  timeCreated?: string;
+  updated?: string;
+}
+
+const folderPromises = result.prefixes.map(async (prefix) => {
+  try {
+    const placeholderRef = ref(storage, `${prefix.fullPath}/.placeholder`);
+    let metadata: SafeMetadata;
+
+    try {
+      metadata = await getMetadata(placeholderRef) as SafeMetadata;
+    } catch (error) {
+      metadata = {
+        customMetadata: {
+          category: 'contracts'
         }
-      });
+      };
+    }
+
+    const custom = metadata.customMetadata;
+
+    return {
+      name: prefix.name,
+      url: '',
+      path: prefix.fullPath,
+      type: 'folder' as const,
+      parentFolder: folder.path.replace('files/', ''),
+      category: custom.category,
+      createdAt: metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : undefined,
+      lastModified: metadata.updated ? new Date(metadata.updated).getTime() : undefined,
+      isLocked: custom.isLocked === 'true',
+      lockedBy: custom.lockedBy,
+      lockedAt: custom.lockedAt
+    };
+  } catch (error) {
+    console.error(`Error processing folder ${prefix.fullPath}:`, error);
+    return null;
+  }
+});
+
 
       const [files, folders] = await Promise.all([
         Promise.all(filePromises),

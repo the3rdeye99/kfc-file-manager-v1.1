@@ -51,24 +51,24 @@ export default function Navigation() {
                 
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                    {user.email?.includes('admin') && (
-                      <>
-                        <Link
-                          href="/signup"
+                {user.email?.includes('admin') && (
+                  <>
+                    <Link
+                      href="/signup"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                           onClick={() => setIsDropdownOpen(false)}
-                        >
+                    >
                           <FiUser />
-                          Add User
-                        </Link>
-                        <Link
-                          href="/users"
+                      Add User
+                    </Link>
+                    <Link
+                      href="/users"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                           onClick={() => setIsDropdownOpen(false)}
-                        >
-                          <FiUsers />
-                          Manage Users
-                        </Link>
+                    >
+                      <FiUsers />
+                      Manage Users
+                    </Link>
                       </>
                     )}
                     <Link
@@ -79,16 +79,16 @@ export default function Navigation() {
                       <FiTrash2 />
                       Trash
                     </Link>
-                    <button
+                <button
                       onClick={() => {
                         setIsDropdownOpen(false);
                         handleLogout();
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center gap-2"
-                    >
-                      <FiLogOut />
-                      Logout
-                    </button>
+                >
+                  <FiLogOut />
+                  Logout
+                </button>
                   </div>
                 )}
               </div>
