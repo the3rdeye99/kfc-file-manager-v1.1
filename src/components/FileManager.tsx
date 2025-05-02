@@ -154,6 +154,9 @@ export default function FileManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
+  // Add ref for file list container
+  const fileListRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000; // 2 seconds
@@ -1116,7 +1119,25 @@ export default function FileManager() {
       setShowNewFolderInput(false);
       setShowNewSubFolderModal(false);
       setSelectedFolder(null);
-      loadFiles();
+      
+      // If user is admin, automatically open the new folder
+      if (isAdmin) {
+        const newFolderItem: FileItem = {
+          name: sanitizedFolderName,
+          path: folderPath,
+          url: '',
+          type: 'folder',
+          parentFolder: currentFolder || 'root',
+          category: newFolderCategory,
+          createdAt: Date.now(),
+          isLocked: false,
+          lockedBy: '',
+          lockedAt: ''
+        };
+        await handleFolderClick(newFolderItem);
+      } else {
+        loadFiles();
+      }
       
       // Dispatch event to notify StorageDashboard
       window.dispatchEvent(new Event('folderCreated'));
@@ -1943,6 +1964,16 @@ const folderPromises = result.prefixes.map(async (prefix) => {
   // Add pagination functions
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    // Use setTimeout to ensure the DOM has updated with new content
+    setTimeout(() => {
+      if (headerRef.current) {
+        const headerHeight = headerRef.current.offsetHeight;
+        window.scrollTo({
+          top: headerHeight + 20, // Add 20px padding
+          behavior: 'smooth'
+        });
+      }
+    }, 0);
   };
 
   const handleItemsPerPageChange = (value: number) => {
@@ -1985,7 +2016,7 @@ const folderPromises = result.prefixes.map(async (prefix) => {
           </div>
         </div>
         {/* Make both breadcrumb and search sticky */}
-        <div className="sticky top-0 z-10 bg-white">
+        <div className="sticky top-0 z-10 bg-white" ref={headerRef}>
           {/* Breadcrumb path */}
           <div className="py-2 border-b">
             <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -2147,12 +2178,12 @@ const folderPromises = result.prefixes.map(async (prefix) => {
             </div>
           )}
         </div>
-        <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`}>
+        <div className={`mt-4 ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}`} ref={fileListRef}>
           {paginatedItems.length > 0 ? (
             paginatedItems.map((item) => (
               <div
                 key={item.path}
-                className={`${
+                className={`file-item ${
                   viewMode === 'grid'
                     ? 'p-4 border rounded-lg hover:bg-gray-50 cursor-pointer relative'
                     : 'p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex items-center justify-between'
@@ -2320,6 +2351,11 @@ const folderPromises = result.prefixes.map(async (prefix) => {
               <option value={100}>100</option>
             </select>
           </div>
+          {!currentFolder && (
+            <div className="text-sm text-gray-600">
+              ({paginatedItems.filter(item => item.type === 'folder').length} folders)
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button
               onClick={() => handlePageChange(currentPage - 1)}
