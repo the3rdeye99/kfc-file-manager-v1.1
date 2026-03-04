@@ -1,0 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  /* Microsoft Fluent color tokens */
+  --ms-blue: #0078d4;
+  --ms-blue-dark: #005a9e;
+  --ms-blue-light: #deecf9;
+  --ms-blue-mid: #c7e0f4;
+
+  --ms-surface: #ffffff;
+  --ms-background: #f5f5f5;
+  --ms-background-alt: #faf9f8;
+
+  --ms-neutral-10: #f3f2f1;
+  --ms-neutral-20: #edebe9;
+  --ms-neutral-30: #e1dfdd;
+  --ms-neutral-40: #d2d0ce;
+  --ms-neutral-60: #a19f9d;
+  --ms-neutral-90: #605e5c;
+  --ms-neutral-110: #3b3a39;
+  --ms-neutral-160: #171717;
+
+  --ms-red: #d13438;
+  --ms-green: #107c10;
+  --ms-orange: #ca5010;
+  --ms-purple: #5c2d91;
+  --ms-teal: #00b4d2;
+
+  /* Sidebar widths */
+  --sidebar-expanded: 240px;
+  --sidebar-collapsed: 48px;
+  --sidebar-width: var(--sidebar-expanded);
+
+  /* Typography */
+  --font-primary: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--ms-background);
+  color: var(--ms-neutral-160);
+  font-family: var(--font-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Fluent scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ms-neutral-40);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ms-neutral-60);
+}
+
+/* Focus outlines */
+:focus-visible {
+  outline: 2px solid var(--ms-blue);
+  outline-offset: 1px;
+}
+
+/* Sidebar layout helpers */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  flex-shrink: 0;
+  transition:
+    width var(--transition-normal),
+    min-width var(--transition-normal);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  transition: margin-left var(--transition-normal);
+}

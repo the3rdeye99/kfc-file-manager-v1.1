@@ -1,0 +1,5 @@
+[33mcommit 85b060ea77a04504e19184e00ec21cbde1f7fb0d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: the3rdeye99 <oluwatobi0112@gmail.com>
+Date:   Sat Apr 12 12:59:45 2025 +0100
+
+    fix: improve authentication flow and session handling - Add delay after login to ensure auth state updates - Force session check after login - Improve navigation after successful login - Fix race condition in auth state updates
