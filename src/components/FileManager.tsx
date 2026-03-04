@@ -1293,8 +1293,13 @@ function FileManager() {
                   </div>
                 );
               })
+            ) : isRefreshing ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '100px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <FiRefreshCw style={{ width: 32, height: 32, color: 'var(--ms-blue)', animation: 'spin 1s linear infinite' }} />
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--ms-neutral-60)' }}>Loading your files...</p>
+              </div>
             ) : (
-              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 0', color: 'var(--ms-neutral-60)', fontSize: 14 }}>
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '100px 0', color: 'var(--ms-neutral-60)', fontSize: 14 }}>
                 {searchQuery ? 'No matching files or folders found' : 'This folder is empty'}
               </div>
             )}
@@ -1349,8 +1354,13 @@ function FileManager() {
                   </div>
                 );
               })
+            ) : isRefreshing ? (
+              <div style={{ textAlign: 'center', padding: '100px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <FiRefreshCw style={{ width: 32, height: 32, color: 'var(--ms-blue)', animation: 'spin 1s linear infinite' }} />
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--ms-neutral-60)' }}>Loading your files...</p>
+              </div>
             ) : (
-              <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--ms-neutral-60)', fontSize: 14 }}>
+              <div style={{ padding: '100px 0', textAlign: 'center', color: 'var(--ms-neutral-60)', fontSize: 14 }}>
                 {searchQuery ? 'No matching files or folders found' : 'This folder is empty'}
               </div>
             )}
