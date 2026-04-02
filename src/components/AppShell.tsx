@@ -20,13 +20,18 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   // Load persisted state
   useEffect(() => {
-    const saved = localStorage.getItem('sidebarCollapsed');
-    if (saved) {
-      setIsCollapsed(JSON.parse(saved));
+    // Only allow expanding on desktop
+    if (window.innerWidth > 768) {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      if (saved) {
+        setIsCollapsed(JSON.parse(saved));
+      } else {
+        setIsCollapsed(false); // Default to expanded on desktop
+      }
     }
   }, []);
 
