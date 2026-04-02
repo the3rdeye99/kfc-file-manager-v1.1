@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob, updateMetadata } from 'firebase/storage';
@@ -1308,9 +1308,13 @@ function FileManager() {
           /* List view */
           <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
             {/* Column headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: `${isMultiSelectMode ? '40px ' : ''}2fr 1fr 1fr 1fr 40px`, padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', gap: 8, alignItems: 'center' }}>
+            <div className={isMultiSelectMode ? 'file-list-grid-select' : 'file-list-grid'} style={{ padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', alignItems: 'center' }}>
               {isMultiSelectMode && <span />}
-              <span>Name</span><span>Category</span><span>Modified</span><span>Size</span><span />
+              <span>Name</span>
+              <span className="hidden-mobile">Category</span>
+              <span className="hidden-mobile">Modified</span>
+              <span className="hidden-mobile">Size</span>
+              <span />
             </div>
             {paginatedItems.length > 0 ? (
               paginatedItems.map((item, i) => {
@@ -1319,10 +1323,9 @@ function FileManager() {
                   <div
                     key={item.path}
                     onClick={e => isMultiSelectMode ? toggleSelectItem(item.path, e) : handleFileClick(item)}
+                    className={isMultiSelectMode ? 'file-list-grid-select' : 'file-list-grid'}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: `${isMultiSelectMode ? '40px ' : ''}2fr 1fr 1fr 1fr 40px`,
-                      padding: '11px 16px', gap: 8, alignItems: 'center',
+                      padding: '11px 16px', alignItems: 'center',
                       borderBottom: i < paginatedItems.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none',
                       background: isSelected ? 'var(--ms-blue-light)' : 'transparent',
                       cursor: 'pointer', fontSize: 13, color: 'var(--ms-neutral-110)',
@@ -1341,13 +1344,13 @@ function FileManager() {
                         {item.type === 'folder' ? <FaFolder style={{ width: 24, height: 24, color: '#FFB900' }} /> : getFileIcon(item.name)}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                        <span style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                        <span className="file-name-mobile" style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                         {item.isLocked && isAdmin && <FiLock style={{ width: 13, height: 13, color: 'var(--ms-red)', flexShrink: 0 }} />}
                       </div>
                     </div>
-                    <div>{item.category && getCategoryBadge(item.category)}</div>
-                    <span style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.lastModified ? new Date(item.lastModified).toLocaleDateString() : '—'}</span>
-                    <span style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.type === 'folder' ? 'Folder' : (item.size ? formatBytes(item.size) : '—')}</span>
+                    <div className="hidden-mobile">{item.category && getCategoryBadge(item.category)}</div>
+                    <span className="hidden-mobile" style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.lastModified ? new Date(item.lastModified).toLocaleDateString() : '—'}</span>
+                    <span className="hidden-mobile" style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.type === 'folder' ? 'Folder' : (item.size ? formatBytes(item.size) : '—')}</span>
                     <button onClick={e => handleMenuOpen(e, item)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, borderRadius: 4 }}>
                       <FiMoreVertical style={{ width: 15, height: 15 }} />
                     </button>

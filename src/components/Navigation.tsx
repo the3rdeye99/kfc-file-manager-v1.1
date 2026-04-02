@@ -90,6 +90,7 @@ export default function SideNavigation() {
         </div>
         {!isCollapsed && (
           <span
+            className="sidebar-expand-label"
             style={{
               color: '#fff',
               fontWeight: 600,
@@ -135,7 +136,7 @@ export default function SideNavigation() {
           {initials}
         </div>
         {!isCollapsed && (
-          <div style={{ overflow: 'hidden' }}>
+          <div className="sidebar-expand-label" style={{ overflow: 'hidden' }}>
             <p style={{ fontWeight: 600, fontSize: 13, margin: 0, color: 'var(--ms-neutral-160)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {username}
             </p>
@@ -186,7 +187,7 @@ export default function SideNavigation() {
               }}
             >
               <Icon style={{ width: 18, height: 18, flexShrink: 0 }} />
-              {!isCollapsed && <span>{item.label}</span>}
+              {!isCollapsed && <span className="sidebar-expand-label">{item.label}</span>}
             </Link>
           );
         })}
@@ -197,6 +198,7 @@ export default function SideNavigation() {
         {/* Collapse Toggle — Repositioned inside */}
         <button
           onClick={toggleSidebar}
+          className="sidebar-toggle-btn"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           style={{
             position: 'absolute',
@@ -248,7 +250,7 @@ export default function SideNavigation() {
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <FiLogOut style={{ width: 18, height: 18, flexShrink: 0 }} />
-          {!isCollapsed && <span style={{ fontWeight: 500 }}>Sign out</span>}
+          {!isCollapsed && <span className="sidebar-expand-label" style={{ fontWeight: 500 }}>Sign out</span>}
         </button>
       </div>
     </aside>

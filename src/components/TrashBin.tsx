@@ -174,13 +174,18 @@ export default function TrashBin() {
       ) : (
         <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
           {/* Table header */}
-          <div style={{ display: 'grid', gridTemplateColumns: isMultiSelectMode ? '40px 2fr 1fr 1fr 1fr 1fr 80px' : '2fr 1fr 1fr 1fr 1fr 80px', padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', alignItems: 'center', gap: 8 }}>
+          <div className={isMultiSelectMode ? 'trash-list-grid-select' : 'trash-list-grid'} style={{ padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', alignItems: 'center' }}>
             {isMultiSelectMode && (
               <button onClick={handleSelectAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-blue)', padding: 0, display: 'flex' }}>
                 {selectedItems.length === trashItems.length ? <FiCheckSquare size={16} /> : <FiSquare size={16} />}
               </button>
             )}
-            <span>Name</span><span>Type</span><span>Deleted By</span><span>Deleted At</span><span>Expires In</span><span>Actions</span>
+            <span>Name</span>
+            <span className="hidden-mobile">Type</span>
+            <span className="hidden-mobile">Deleted By</span>
+            <span className="hidden-mobile">Deleted At</span>
+            <span className="hidden-mobile">Expires In</span>
+            <span>Actions</span>
           </div>
 
           {/* Table rows */}
@@ -190,13 +195,11 @@ export default function TrashBin() {
             return (
               <div
                 key={item.id}
+                className={isMultiSelectMode ? 'trash-list-grid-select' : 'trash-list-grid'}
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMultiSelectMode ? '40px 2fr 1fr 1fr 1fr 1fr 80px' : '2fr 1fr 1fr 1fr 1fr 80px',
                   padding: '12px 16px',
                   borderBottom: '1px solid var(--ms-neutral-10)',
                   alignItems: 'center',
-                  gap: 8,
                   background: isSelected ? 'var(--ms-blue-light)' : 'transparent',
                   fontSize: 13,
                   color: 'var(--ms-neutral-110)',
@@ -212,11 +215,11 @@ export default function TrashBin() {
                     {isSelected ? <FiCheckSquare size={16} /> : <FiSquare size={16} />}
                   </div>
                 )}
-                <span style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.fileName}</span>
-                <span style={{ color: 'var(--ms-neutral-60)', fontSize: 12 }}>{item.fileType}</span>
-                <span>{item.username}</span>
-                <span style={{ fontSize: 12 }}>{formatDate(item.deletedAt)}</span>
-                <span>
+                <span className="file-name-mobile" style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.fileName}</span>
+                <span className="hidden-mobile" style={{ color: 'var(--ms-neutral-60)', fontSize: 12 }}>{item.fileType}</span>
+                <span className="hidden-mobile">{item.username}</span>
+                <span className="hidden-mobile" style={{ fontSize: 12 }}>{formatDate(item.deletedAt)}</span>
+                <span className="hidden-mobile">
                   <span style={{
                     padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
                     background: days <= 3 ? '#fde7e7' : days <= 7 ? '#fff4ce' : 'var(--ms-neutral-10)',
