@@ -1736,7 +1736,7 @@ function FileManager() {
                   <FiFolderPlus style={{ width: 13, height: 13 }} /> {selectedFiles.some(f => getRelPath(f).includes('/')) ? 'Add another folder' : 'Select a folder'}
                 </button>
                 <button type="button" onClick={() => zipInputRef.current?.click()} style={{ ...fluentBtn('ghost'), marginLeft: 8 }}>
-                  <FiArchive style={{ width: 13, height: 13 }} /> Folder from .zip
+                  <FiArchive style={{ width: 13, height: 13 }} /> Folders from .zip
                 </button>
                 <input
                   ref={zipInputRef}
@@ -1764,7 +1764,7 @@ function FileManager() {
               </div>
 
               <p style={{ margin: '0 0 20px', textAlign: 'center', fontSize: 11, color: 'var(--ms-neutral-60)' }}>
-                You can add several folders. On a phone, zip the folder first and use “Folder from .zip” — it is unpacked back into a folder with the same name.
+                You can add several folders. On a phone, zip the folder first and use “Folders from .zip” (you can select several zips at once) — it is unpacked back into a folder with the same name.
               </p>
 
               {selectedFiles.length > 0 && (
