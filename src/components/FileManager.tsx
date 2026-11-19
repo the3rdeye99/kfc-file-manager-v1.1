@@ -83,6 +83,9 @@ function FileManager() {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [totalSize, setTotalSize] = useState(0);
   const lastUploadedBytes = useRef(0);
+  // Relative path (e.g. "MyFolder/sub/a.pdf") for files that came from a folder upload
+  const relPathMap = useRef(new WeakMap<File, string>());
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const lastUpdateTime = useRef(Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingItem, setEditingItem] = useState<FileItem | null>(null);
@@ -917,9 +920,68 @@ function FileManager() {
     loadFiles();
   };
 
+  const IGNORED_FILES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini', '.placeholder']);
+
+  const getRelPath = (file: File) =>
+    (relPathMap.current.get(file) || (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name)
+      .replace(/^\/+/, '');
+
+  // Add picked/dropped files, remembering their folder-relative path
+  const addFilesToSelection = (incoming: File[]) => {
+    const usable = incoming.filter(f => !IGNORED_FILES.has(f.name.toLowerCase()));
+    usable.forEach(f => {
+      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
+      if (rel && !relPathMap.current.has(f)) relPathMap.current.set(f, rel);
+    });
+    setSelectedFiles(prev => [...prev, ...usable]);
+  };
+
+  // Recursively read a dropped folder (FileSystemEntry) into files with relative paths
+  const readEntry = async (entry: any, prefix = ''): Promise<File[]> => {
+    if (entry.isFile) {
+      const file: File = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      if (prefix) relPathMap.current.set(file, `${prefix}${file.name}`);
+      return [file];
+    }
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const children: any[] = [];
+      // readEntries returns results in batches; keep reading until empty
+      for (;;) {
+        const batch: any[] = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        if (batch.length === 0) break;
+        children.push(...batch);
+      }
+      const nested = await Promise.all(children.map(c => readEntry(c, `${prefix}${entry.name}/`)));
+      return nested.flat();
+    }
+    return [];
+  };
+
+  const handleDropEvent = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const items = Array.from(e.dataTransfer.items || []);
+    const entries = items.map(i => (i as any).webkitGetAsEntry?.()).filter(Boolean);
+    if (entries.length > 0) {
+      const all = (await Promise.all(entries.map((en: any) => readEntry(en)))).flat();
+      addFilesToSelection(all);
+    } else {
+      addFilesToSelection(Array.from(e.dataTransfer.files));
+    }
+  };
+
   const handleUpload = async () => {
     if (selectedFiles.length === 0) {
       toast.error('Please select files to upload');
+      return;
+    }
+
+    const base = currentFolder ? `files/${currentFolder}` : 'files';
+    const queue = selectedFiles.map(file => ({ file, rel: getRelPath(file) }));
+
+    // At the top level, everything must live inside a folder
+    if (!currentFolder && queue.some(q => !q.rel.includes('/'))) {
+      toast.error('At the top level you can only upload folders. Open a folder to upload single files.');
       return;
     }
 
@@ -927,61 +989,88 @@ function FileManager() {
     setUploadProgress(0);
     setShowUploadModal(false);
 
-    let completedFiles = 0;
-    const totalFiles = selectedFiles.length;
-    let totalBytesUploaded = 0;
-    const totalBytesToUpload = selectedFiles.reduce((acc, file) => acc + file.size, 0);
+    const totalBytesToUpload = queue.reduce((acc, q) => acc + q.file.size, 0);
     setTotalSize(totalBytesToUpload);
-
+    lastUploadedBytes.current = 0;
     const startTime = Date.now();
 
-    for (const file of selectedFiles) {
-      const storageRef = ref(storage, currentFolder ? `files/${currentFolder}/${file.name}` : `files/${file.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, file, {
-        customMetadata: {
-          category: uploadCategory,
-          uploadedBy: user?.email || 'unknown',
-          uploadedAt: new Date().toISOString()
+    try {
+      // 1. Create a folder placeholder for every new directory, named exactly like the local folder
+      const dirs = new Set<string>();
+      queue.forEach(({ rel }) => {
+        const parts = rel.split('/').slice(0, -1);
+        parts.forEach((_, i) => dirs.add(parts.slice(0, i + 1).join('/')));
+      });
+      const sortedDirs = Array.from(dirs).sort((a, b) => a.split('/').length - b.split('/').length);
+      for (const dir of sortedDirs) {
+        const placeholderRef = ref(storage, `${base}/${dir}/.placeholder`);
+        let exists = true;
+        try { await getMetadata(placeholderRef); } catch { exists = false; }
+        if (!exists) {
+          await uploadBytesResumable(placeholderRef, new Blob([''], { type: 'text/plain' }), {
+            customMetadata: { category: uploadCategory, isLocked: 'false', lockedBy: '', lockedAt: '' }
+          });
         }
+      }
+
+      // 2. Upload files with limited concurrency
+      const transferred = new Map<number, number>();
+      let failed = 0;
+      let next = 0;
+      const updateProgress = () => {
+        const done = Array.from(transferred.values()).reduce((a, b) => a + b, 0);
+        lastUploadedBytes.current = done;
+        setUploadProgress(totalBytesToUpload > 0 ? (done / totalBytesToUpload) * 100 : 100);
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (elapsed > 0 && done > 0) {
+          const speed = done / elapsed;
+          setUploadSpeed(speed);
+          setTimeRemaining((totalBytesToUpload - done) / speed);
+        }
+      };
+
+      const uploadOne = (index: number) => new Promise<void>(resolve => {
+        const { file, rel } = queue[index];
+        const task = uploadBytesResumable(ref(storage, `${base}/${rel}`), file, {
+          customMetadata: {
+            category: uploadCategory,
+            uploadedBy: user?.email || 'unknown',
+            uploadedAt: new Date().toISOString()
+          }
+        });
+        setUploadTasks(prev => [...prev, task]);
+        task.on('state_changed',
+          snap => { transferred.set(index, snap.bytesTransferred); updateProgress(); },
+          error => {
+            console.error('Upload error:', error);
+            toast.error(`Failed to upload ${rel}`);
+            failed++;
+            resolve();
+          },
+          () => { transferred.set(index, file.size); updateProgress(); resolve(); }
+        );
       });
 
-      setUploadTasks(prev => [...prev, uploadTask]);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          // Calculate overall progress across all files
-          const currentFileProgress = snapshot.bytesTransferred;
-          const overallProgress = ((totalBytesUploaded + currentFileProgress) / totalBytesToUpload) * 100;
-          setUploadProgress(overallProgress);
-          lastUploadedBytes.current = totalBytesUploaded + currentFileProgress;
-
-          const elapsed = (Date.now() - startTime) / 1000;
-          if (elapsed > 0) {
-            const speed = lastUploadedBytes.current / elapsed;
-            setUploadSpeed(speed);
-            const remaining = (totalBytesToUpload - lastUploadedBytes.current) / speed;
-            setTimeRemaining(remaining);
-          }
-        },
-        (error) => {
-          console.error('Upload error:', error);
-          toast.error(`Failed to upload ${file.name}`);
-        },
-        async () => {
-          totalBytesUploaded += file.size;
-          completedFiles++;
-          if (completedFiles === totalFiles) {
-            setUploading(false);
-            setUploadTasks([]);
-            setSelectedFiles([]);
-            setUploadProgress(0);
-            toast.success('All files uploaded successfully');
-            loadFiles();
-          }
+      const worker = async () => {
+        while (next < queue.length) {
+          const index = next++;
+          await uploadOne(index);
         }
-      );
+      };
+      await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+
+      if (failed === 0) toast.success(`Uploaded ${queue.length} file${queue.length !== 1 ? 's' : ''} successfully`);
+      else toast.error(`${failed} of ${queue.length} files failed to upload`);
+    } catch (error) {
+      console.error('Folder upload error:', error);
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+      setUploadTasks([]);
+      setSelectedFiles([]);
+      setUploadProgress(0);
+      loadFiles();
+      window.dispatchEvent(new Event('folderCreated'));
     }
   };
 
@@ -1148,9 +1237,14 @@ function FileManager() {
                     <FiUpload style={{ width: 13, height: 13 }} /> Upload
                   </button>
                 ) : (
-                  <button onClick={() => setShowNewFolderInput(true)} style={fluentBtn('primary')}>
-                    <FiFolderPlus style={{ width: 13, height: 13 }} /> New folder
-                  </button>
+                  <>
+                    <button onClick={() => setShowNewFolderInput(true)} style={fluentBtn('primary')}>
+                      <FiFolderPlus style={{ width: 13, height: 13 }} /> New folder
+                    </button>
+                    <button onClick={() => setShowUploadModal(true)} style={fluentBtn('ghost')}>
+                      <FiUpload style={{ width: 13, height: 13 }} /> Upload folder
+                    </button>
+                  </>
                 )}
 
                 <span style={{ width: 1, height: 20, background: 'var(--ms-neutral-30)', margin: '0 4px' }} />
@@ -1573,7 +1667,7 @@ function FileManager() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 'calc(100% - 32px)', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--ms-neutral-20)' }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Upload files</h2>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Upload files or folders</h2>
               <button onClick={() => { setShowUploadModal(false); setSelectedFiles([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, borderRadius: 4, display: 'flex' }}><FiX style={{ width: 18, height: 18 }} /></button>
             </div>
             <div style={{ padding: 20 }}>
@@ -1588,24 +1682,37 @@ function FileManager() {
                   marginBottom: 20
                 }}
                 onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                  e.preventDefault();
-                  const files = Array.from(e.dataTransfer.files);
-                  setSelectedFiles(prev => [...prev, ...files]);
-                }}
+                onDrop={handleDropEvent}
                 onClick={() => document.getElementById('fileInput')?.click()}
               >
                 <FiUpload style={{ width: 32, height: 32, color: 'var(--ms-blue)', marginBottom: 12, opacity: 0.7 }} />
-                <p style={{ margin: 0, fontSize: 14, color: 'var(--ms-neutral-160)', fontWeight: 500 }}>Drop files here or click to browse</p>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ms-neutral-60)' }}>Upload documents to {currentFolder || 'root'}</p>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--ms-neutral-160)', fontWeight: 500 }}>Drop files or folders here, or click to browse</p>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ms-neutral-60)' }}>Upload to {currentFolder || 'the top level (folders only)'}</p>
                 <input 
                   id="fileInput" 
                   type="file" 
                   multiple 
                   style={{ display: 'none' }} 
                   onChange={e => {
-                    const files = e.target.files ? Array.from(e.target.files) : [];
-                    setSelectedFiles(prev => [...prev, ...files]);
+                    addFilesToSelection(e.target.files ? Array.from(e.target.files) : []);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+                <button type="button" onClick={() => folderInputRef.current?.click()} style={fluentBtn('ghost')}>
+                  <FiFolderPlus style={{ width: 13, height: 13 }} /> Select a folder
+                </button>
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  style={{ display: 'none' }}
+                  {...({ webkitdirectory: '', directory: '' } as any)}
+                  onChange={e => {
+                    addFilesToSelection(e.target.files ? Array.from(e.target.files) : []);
+                    e.target.value = '';
                   }}
                 />
               </div>
@@ -1618,7 +1725,7 @@ function FileManager() {
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: idx < selectedFiles.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none', fontSize: 13 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
                           {getFileIcon(file.name)}
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getRelPath(file)}</span>
                         </div>
                         <button 
                           onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
