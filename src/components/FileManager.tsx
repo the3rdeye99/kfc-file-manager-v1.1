@@ -1185,7 +1185,7 @@ function FileManager() {
       }}>
         {/* Row 1: Title + Search */}
         <div className="fm-row1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 48, gap: 16 }}>
-          <div className="fm-title" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div className="fm-title" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
             <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ms-neutral-160)', whiteSpace: 'nowrap' }}>Files</h1>
             <FiChevronRight style={{ width: 14, height: 14, color: 'var(--ms-neutral-40)', flexShrink: 0 }} />
             {/* Breadcrumb */}
@@ -1293,8 +1293,8 @@ function FileManager() {
         </div>
 
         {/* Row 2: Command Bar */}
-        <div className="fm-row2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40, gap: 8 }}>
-          <div className="fm-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="fm-row2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', minHeight: 40, padding: '4px 0', gap: 8 }}>
+          <div className="fm-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, columnGap: 6, minWidth: 0, flex: '1 1 auto' }}>
             {isAdmin && (
               <>
                 {currentFolder ? (
