@@ -50,7 +50,7 @@ export default function SideNavigation() {
     <aside
       style={{
         width: isCollapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-expanded)',
-        height: '100vh',
+        height: '100dvh',
         background: '#ffffff',
         borderRight: '1px solid var(--ms-neutral-30)',
         display: 'flex',
