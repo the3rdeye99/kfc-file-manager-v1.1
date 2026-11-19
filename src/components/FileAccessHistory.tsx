@@ -103,11 +103,12 @@ export default function FileAccessHistory() {
 
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: columns.join(' '), padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', gap: 8 }}>
+        <div className="access-grid access-head" style={{ display: 'grid', gridTemplateColumns: columns.join(' '), padding: '10px 16px', background: 'var(--ms-neutral-10)', borderBottom: '1px solid var(--ms-neutral-20)', fontSize: 11, fontWeight: 700, color: 'var(--ms-neutral-90)', textTransform: 'uppercase', letterSpacing: '0.05em', gap: 8 }}>
           <span>File Path</span><span>User</span><span>Timestamp</span>
         </div>
         {accessHistory.map((access, i) => (
           <div key={access.id}
+            className="access-grid"
             style={{ display: 'grid', gridTemplateColumns: columns.join(' '), padding: '11px 16px', borderBottom: i < accessHistory.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none', gap: 8, fontSize: 13, alignItems: 'center', transition: 'background var(--transition-fast)' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--ms-neutral-10)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

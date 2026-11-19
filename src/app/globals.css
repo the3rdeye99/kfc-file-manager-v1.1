@@ -119,6 +119,115 @@ body {
   align-items: center;
 }
 
+/* Trash list grid (was previously undefined) */
+.trash-list-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.2fr 80px 56px;
+  gap: 8px;
+  align-items: center;
+}
+.trash-list-grid-select {
+  display: grid;
+  grid-template-columns: 32px 2fr 1fr 1fr 1.2fr 80px 56px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Prevent horizontal overflow anywhere */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+img,
+video,
+iframe {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .trash-list-grid {
+    grid-template-columns: 1fr 44px;
+  }
+  .trash-list-grid-select {
+    grid-template-columns: 28px 1fr 44px;
+  }
+
+  /* Page padding */
+  .page-pad {
+    padding: 16px 12px !important;
+  }
+
+  /* File manager top bar */
+  .fm-topbar {
+    padding: 0 12px !important;
+  }
+  .fm-row1 {
+    flex-direction: column;
+    align-items: stretch !important;
+    height: auto !important;
+    gap: 8px !important;
+    padding: 8px 0;
+  }
+  .fm-title {
+    flex-wrap: wrap;
+  }
+  .fm-search {
+    width: 100%;
+  }
+  .fm-search input {
+    width: 100% !important;
+    font-size: 16px !important; /* stop iOS zoom */
+  }
+  .fm-row2 {
+    height: auto !important;
+    flex-wrap: wrap;
+    padding: 6px 0 8px;
+    row-gap: 6px;
+  }
+  .fm-actions {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .fm-actions select {
+    max-width: 100%;
+  }
+  .fm-content {
+    padding: 12px !important;
+  }
+  .fm-pagination {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 10px;
+  }
+  .fm-pagination > div {
+    justify-content: space-between;
+  }
+
+  /* Users */
+  .user-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    padding: 12px !important;
+  }
+  .user-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Access history */
+  .access-grid {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+  }
+  .access-head {
+    display: none !important;
+  }
+
+  .page-header {
+    align-items: flex-start !important;
+  }
+}
+
 @media (max-width: 768px) {
   .file-list-grid {
     grid-template-columns: 1fr 40px;

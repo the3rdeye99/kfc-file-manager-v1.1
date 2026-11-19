@@ -125,7 +125,7 @@ export default function UserManagement() {
 
   const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-      <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: '100%', maxWidth: 440, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 'calc(100% - 32px)', maxWidth: 440, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--ms-neutral-20)' }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ms-neutral-160)' }}>{title}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, display: 'flex', borderRadius: 4 }}>
@@ -138,7 +138,7 @@ export default function UserManagement() {
   );
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-pad" style={{ padding: '24px 32px' }}>
       <div style={{ marginBottom: 20 }}>
         <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-90)', fontSize: 13, fontFamily: 'inherit', marginBottom: 16 }}>
           <FiArrowLeft size={15} /> Back
@@ -169,11 +169,12 @@ export default function UserManagement() {
         <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
           {users.map((u, i) => (
             <div key={u.uid}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: i < users.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none' }}
+              className="user-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 20px', borderBottom: i < users.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--ms-neutral-10)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--ms-blue)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, flexShrink: 0, letterSpacing: 0.5 }}>
                   {initials(u)}
                 </div>
@@ -184,7 +185,7 @@ export default function UserManagement() {
                 </div>
               </div>
               {u.email !== 'admin@kayodefilani.com' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="user-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={() => { setEditingUser(u); setNewName(u.displayName || ''); }} style={{ ...msBtn('ghost'), fontSize: 12 }}>
                     <FiEdit2 size={13} /> Edit
                   </button>

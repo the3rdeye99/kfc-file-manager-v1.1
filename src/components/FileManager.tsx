@@ -125,8 +125,8 @@ function FileManager() {
     
     // Adjust position to prevent screen cutoff
     const menuWidth = 180;
-    const x = e.clientX + menuWidth > window.innerWidth ? e.clientX - menuWidth : e.clientX;
-    const y = e.clientY;
+    const x = Math.max(8, Math.min(e.clientX + menuWidth > window.innerWidth ? e.clientX - menuWidth : e.clientX, window.innerWidth - menuWidth - 8));
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - 220));
     
     setMenuAnchor({ x, y });
   };
@@ -1025,13 +1025,13 @@ function FileManager() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
       {/* ── Top Bar ── */}
-      <div style={{
+      <div className="fm-topbar" style={{
         background: '#fff', borderBottom: '1px solid var(--ms-neutral-20)',
         position: 'sticky', top: 0, zIndex: 20, padding: '0 24px',
       }}>
         {/* Row 1: Title + Search */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 48, gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div className="fm-row1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 48, gap: 16 }}>
+          <div className="fm-title" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ms-neutral-160)', whiteSpace: 'nowrap' }}>Files</h1>
             <FiChevronRight style={{ width: 14, height: 14, color: 'var(--ms-neutral-40)', flexShrink: 0 }} />
             {/* Breadcrumb */}
@@ -1054,7 +1054,7 @@ function FileManager() {
           </div>
 
           {/* Search */}
-          <div ref={searchContainerRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <div ref={searchContainerRef} className="fm-search" style={{ position: 'relative', flexShrink: 0 }}>
             <FiSearch style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ms-neutral-60)', width: 14, height: 14, zIndex: 1, pointerEvents: 'none' }} />
             <input
               type="text"
@@ -1073,7 +1073,7 @@ function FileManager() {
                   if (item) { setShowSearchDropdown(false); setSearchQuery(''); if (item.type === 'folder') handleFolderClick(item); else handleFileClick(item); }
                 }
               }}
-              style={{ paddingLeft: 32, paddingRight: isSearching ? 30 : searchQuery ? 30 : 12, paddingTop: 7, paddingBottom: 7, width: 320, border: '1px solid', borderColor: showSearchDropdown && searchResults.length > 0 ? 'var(--ms-blue)' : 'var(--ms-neutral-30)', borderRadius: showSearchDropdown && searchResults.length > 0 ? '20px 20px 0 0' : 20, borderBottom: showSearchDropdown && searchResults.length > 0 ? 'none' : undefined, fontSize: 13, color: 'var(--ms-neutral-160)', outline: 'none', fontFamily: 'inherit', background: '#fff', transition: 'border-color 0.15s' }}
+              style={{ paddingLeft: 32, paddingRight: isSearching ? 30 : searchQuery ? 30 : 12, paddingTop: 7, paddingBottom: 7, width: 320, maxWidth: '100%', border: '1px solid', borderColor: showSearchDropdown && searchResults.length > 0 ? 'var(--ms-blue)' : 'var(--ms-neutral-30)', borderRadius: showSearchDropdown && searchResults.length > 0 ? '20px 20px 0 0' : 20, borderBottom: showSearchDropdown && searchResults.length > 0 ? 'none' : undefined, fontSize: 13, color: 'var(--ms-neutral-160)', outline: 'none', fontFamily: 'inherit', background: '#fff', transition: 'border-color 0.15s' }}
             />
             {/* Clear button */}
             {searchQuery && !isSearching && (
@@ -1139,8 +1139,8 @@ function FileManager() {
         </div>
 
         {/* Row 2: Command Bar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40, gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="fm-row2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40, gap: 8 }}>
+          <div className="fm-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {isAdmin && (
               <>
                 {currentFolder ? (
@@ -1213,7 +1213,7 @@ function FileManager() {
       </div>
 
       {/* ── Main Content ── */}
-      <div style={{ flex: 1, padding: '20px 24px', background: 'var(--ms-background)' }}>
+      <div className="fm-content" style={{ flex: 1, padding: '20px 24px', background: 'var(--ms-background)' }}>
         {viewMode === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
             {paginatedItems.length > 0 ? (
@@ -1372,7 +1372,7 @@ function FileManager() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', padding: '10px 16px', fontSize: 13 }}>
+          <div className="fm-pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', padding: '10px 16px', fontSize: 13 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: 'var(--ms-neutral-60)' }}>Per page:</span>
               <select value={itemsPerPage} onChange={e => setItemsPerPage(Number(e.target.value))} style={{ padding: '4px 8px', border: '1px solid var(--ms-neutral-30)', borderRadius: 4, fontSize: 12, color: 'var(--ms-neutral-110)', fontFamily: 'inherit', cursor: 'pointer' }}>
@@ -1395,7 +1395,7 @@ function FileManager() {
       {/* ── New Folder Modal ── */}
       {showNewFolderInput && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: '100%', maxWidth: 420, overflow: 'hidden' }}>
+          <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 'calc(100% - 32px)', maxWidth: 420, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--ms-neutral-20)' }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create new folder</h2>
               <button onClick={() => { setShowNewFolderInput(false); setNewFolderName(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, borderRadius: 4, display: 'flex' }}><FiX style={{ width: 18, height: 18 }} /></button>
@@ -1427,7 +1427,7 @@ function FileManager() {
 
       {/* ── Upload Progress ── */}
       {uploading && (
-        <div style={{ position: 'fixed', bottom: 16, right: 16, background: '#fff', padding: 16, borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 300, border: '1px solid var(--ms-neutral-20)', zIndex: 200 }}>
+        <div style={{ position: 'fixed', bottom: 16, right: 16, background: '#fff', padding: 16, borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 300, maxWidth: 'calc(100vw - 32px)', border: '1px solid var(--ms-neutral-20)', zIndex: 200 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ms-neutral-160)' }}>Uploading…</span>
             <span style={{ fontSize: 12, color: 'var(--ms-neutral-90)' }}>{Math.round(uploadProgress)}%</span>
@@ -1453,8 +1453,8 @@ function FileManager() {
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--ms-neutral-20)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--ms-neutral-20)', flexShrink: 0, gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden', minWidth: 0 }}>
                 <div style={{ width: 22, height: 22, flexShrink: 0 }} className={getFileColor(previewFile)}>
                   {getFileIcon(previewFile.name)}
                 </div>
@@ -1558,7 +1558,7 @@ function FileManager() {
             </div>
 
             {/* Footer meta */}
-            <div style={{ padding: '10px 20px', borderTop: '1px solid var(--ms-neutral-20)', display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: 'var(--ms-neutral-60)', flexShrink: 0 }}>
+            <div style={{ padding: '10px 20px', borderTop: '1px solid var(--ms-neutral-20)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--ms-neutral-60)', flexShrink: 0 }}>
               {previewFile.category && getCategoryBadge(previewFile.category)}
               {previewFile.lastModified && (
                 <span>Modified: {new Date(previewFile.lastModified).toLocaleDateString()}</span>
@@ -1571,7 +1571,7 @@ function FileManager() {
       {/* ── File Upload Modal ── */}
       {showUploadModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: '100%', maxWidth: 500, overflow: 'hidden' }}>
+          <div style={{ background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-lg)', width: 'calc(100% - 32px)', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--ms-neutral-20)' }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Upload files</h2>
               <button onClick={() => { setShowUploadModal(false); setSelectedFiles([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, borderRadius: 4, display: 'flex' }}><FiX style={{ width: 18, height: 18 }} /></button>

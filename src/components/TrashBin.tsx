@@ -114,7 +114,7 @@ export default function TrashBin() {
 
   if (!user || !isAdmin) {
     return (
-      <div style={{ padding: '40px 32px' }}>
+      <div className="page-pad" style={{ padding: '40px 32px' }}>
         <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', padding: '40px', textAlign: 'center', maxWidth: 400, margin: '0 auto' }}>
           <FiAlertTriangle style={{ width: 40, height: 40, color: 'var(--ms-orange)', marginBottom: 16 }} />
           <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600 }}>Access Denied</h2>
@@ -125,10 +125,10 @@ export default function TrashBin() {
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-pad" style={{ padding: '24px 32px' }}>
 
       {/* Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--ms-neutral-160)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <FiTrash2 style={{ color: 'var(--ms-neutral-60)' }} /> Recycle Bin
@@ -137,7 +137,7 @@ export default function TrashBin() {
             {pagination.total} item{pagination.total !== 1 ? 's' : ''} — auto-deleted after 30 days
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button style={msBtn('ghost')} onClick={() => fetchTrashItems(pagination.page, pagination.limit)}>
             <FiRefreshCw style={{ width: 14, height: 14 }} /> Refresh
           </button>
