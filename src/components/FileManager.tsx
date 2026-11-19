@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { unzip } from 'fflate';
 import { ref, uploadBytesResumable, listAll, getDownloadURL, deleteObject, UploadTaskSnapshot, UploadTask, getMetadata, getBlob, updateMetadata } from 'firebase/storage';
 import { storage, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -86,6 +87,7 @@ function FileManager() {
   // Relative path (e.g. "MyFolder/sub/a.pdf") for files that came from a folder upload
   const relPathMap = useRef(new WeakMap<File, string>());
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
   const lastUpdateTime = useRef(Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingItem, setEditingItem] = useState<FileItem | null>(null);
@@ -936,6 +938,35 @@ function FileManager() {
     setSelectedFiles(prev => [...prev, ...usable]);
   };
 
+  // Unpack a .zip into files that behave like an uploaded folder
+  const addZipAsFolder = async (zipFile: File) => {
+    try {
+      const data = new Uint8Array(await zipFile.arrayBuffer());
+      const entries: Record<string, Uint8Array> = await new Promise((resolve, reject) =>
+        unzip(data, (err, out) => (err ? reject(err) : resolve(out)))
+      );
+      const paths = Object.keys(entries).filter(
+        n => !n.endsWith('/') && !n.startsWith('__MACOSX/') && !n.split('/').some(seg => seg === '.DS_Store')
+      );
+      if (paths.length === 0) { toast.error(`${zipFile.name} has no files`); return; }
+      // If the zip already wraps everything in one folder, keep that name; otherwise use the zip's name
+      const tops = new Set(paths.map(n => (n.includes('/') ? n.split('/')[0] : '')));
+      const wrapped = tops.size === 1 && !tops.has('');
+      const rootName = zipFile.name.replace(/\.zip$/i, '');
+      const files = paths.map(n => {
+        const name = n.split('/').pop() as string;
+        const f = new File([entries[n] as BlobPart], name, { lastModified: zipFile.lastModified });
+        relPathMap.current.set(f, wrapped ? n : `${rootName}/${n}`);
+        return f;
+      });
+      addFilesToSelection(files);
+      toast.success(`Unpacked ${files.length} file${files.length !== 1 ? 's' : ''} from ${zipFile.name}`);
+    } catch (err) {
+      console.error('Zip error:', err);
+      toast.error(`Could not read ${zipFile.name}. Is it a valid .zip?`);
+    }
+  };
+
   // Recursively read a dropped folder (FileSystemEntry) into files with relative paths
   const readEntry = async (entry: any, prefix = ''): Promise<File[]> => {
     if (entry.isFile) {
@@ -1700,13 +1731,25 @@ function FileManager() {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
                 <button type="button" onClick={() => folderInputRef.current?.click()} style={fluentBtn('ghost')}>
                   <FiFolderPlus style={{ width: 13, height: 13 }} /> {selectedFiles.some(f => getRelPath(f).includes('/')) ? 'Add another folder' : 'Select a folder'}
                 </button>
-                <span style={{ marginLeft: 10, alignSelf: 'center', fontSize: 11, color: 'var(--ms-neutral-60)' }}>
-                  You can add several folders
-                </span>
+                <button type="button" onClick={() => zipInputRef.current?.click()} style={{ ...fluentBtn('ghost'), marginLeft: 8 }}>
+                  <FiArchive style={{ width: 13, height: 13 }} /> Folder from .zip
+                </button>
+                <input
+                  ref={zipInputRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={async e => {
+                    const zips = e.target.files ? Array.from(e.target.files) : [];
+                    e.target.value = '';
+                    for (const z of zips) await addZipAsFolder(z);
+                  }}
+                />
                 <input
                   ref={folderInputRef}
                   type="file"
@@ -1719,6 +1762,10 @@ function FileManager() {
                   }}
                 />
               </div>
+
+              <p style={{ margin: '0 0 20px', textAlign: 'center', fontSize: 11, color: 'var(--ms-neutral-60)' }}>
+                You can add several folders. On a phone, zip the folder first and use “Folder from .zip” — it is unpacked back into a folder with the same name.
+              </p>
 
               {selectedFiles.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
