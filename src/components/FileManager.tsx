@@ -1144,6 +1144,12 @@ function FileManager() {
 
   useEffect(() => { setCurrentPage(1); }, [dateFilter, dateFrom, dateTo, selectedCategory]);
 
+  // Never sit on a page that no longer exists (e.g. after deleting items or changing page size)
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
+    if (currentPage > pages) setCurrentPage(pages);
+  }, [filteredItems.length, itemsPerPage, currentPage]);
+
   // Wrap matched substring in a bold span
   const highlightText = (text: string, query: string): React.ReactNode => {
     if (!query.trim()) return text;
@@ -1565,7 +1571,13 @@ function FileManager() {
           <div className="fm-pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, background: '#fff', borderRadius: 6, border: '1px solid var(--ms-neutral-20)', padding: '10px 16px', fontSize: 13 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: 'var(--ms-neutral-60)' }}>Per page:</span>
-              <select value={itemsPerPage} onChange={e => setItemsPerPage(Number(e.target.value))} style={{ padding: '4px 8px', border: '1px solid var(--ms-neutral-30)', borderRadius: 4, fontSize: 12, color: 'var(--ms-neutral-110)', fontFamily: 'inherit', cursor: 'pointer' }}>
+              <select value={itemsPerPage} onChange={e => {
+                const newPer = Number(e.target.value);
+                // Keep the first item you were looking at in view on the new page size
+                const firstIndex = (currentPage - 1) * itemsPerPage;
+                setCurrentPage(Math.floor(firstIndex / newPer) + 1);
+                setItemsPerPage(newPer);
+              }} style={{ padding: '4px 8px', border: '1px solid var(--ms-neutral-30)', borderRadius: 4, fontSize: 12, color: 'var(--ms-neutral-110)', fontFamily: 'inherit', cursor: 'pointer' }}>
                 <option value={20}>20</option><option value={50}>50</option><option value={100}>100</option>
               </select>
             </div>
