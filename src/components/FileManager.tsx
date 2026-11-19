@@ -1702,8 +1702,11 @@ function FileManager() {
 
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
                 <button type="button" onClick={() => folderInputRef.current?.click()} style={fluentBtn('ghost')}>
-                  <FiFolderPlus style={{ width: 13, height: 13 }} /> Select a folder
+                  <FiFolderPlus style={{ width: 13, height: 13 }} /> {selectedFiles.some(f => getRelPath(f).includes('/')) ? 'Add another folder' : 'Select a folder'}
                 </button>
+                <span style={{ marginLeft: 10, alignSelf: 'center', fontSize: 11, color: 'var(--ms-neutral-60)' }}>
+                  You can add several folders
+                </span>
                 <input
                   ref={folderInputRef}
                   type="file"
@@ -1719,7 +1722,12 @@ function FileManager() {
 
               {selectedFiles.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ms-neutral-90)', marginBottom: 8 }}>Selected files ({selectedFiles.length})</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ms-neutral-90)', marginBottom: 8 }}>Selected files ({selectedFiles.length})
+                    {(() => {
+                      const tops = Array.from(new Set(selectedFiles.map(f => getRelPath(f)).filter(r => r.includes('/')).map(r => r.split('/')[0])));
+                      return tops.length > 0 ? ` · ${tops.length} folder${tops.length !== 1 ? 's' : ''}: ${tops.join(', ')}` : '';
+                    })()}
+                  </label>
                   <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--ms-neutral-20)', borderRadius: 4, background: '#fff' }}>
                     {selectedFiles.map((file, idx) => (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: idx < selectedFiles.length - 1 ? '1px solid var(--ms-neutral-10)' : 'none', fontSize: 13 }}>
