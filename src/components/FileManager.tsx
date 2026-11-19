@@ -44,6 +44,14 @@ const getUserPermissions = (email: string | null | undefined, role?: string) => 
   return { isAdmin: false, canDownload: false, canLock: false };
 };
 
+const getItemDate = (item: { lastModified?: number; createdAt?: number }): number | undefined =>
+  item.lastModified ?? item.createdAt;
+
+const formatItemDate = (item: { lastModified?: number; createdAt?: number }): string => {
+  const t = getItemDate(item);
+  return t ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date';
+};
+
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -84,6 +92,9 @@ function FileManager() {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [totalSize, setTotalSize] = useState(0);
   const lastUploadedBytes = useRef(0);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7d' | '30d' | 'year' | 'custom'>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   // Relative path (e.g. "MyFolder/sub/a.pdf") for files that came from a folder upload
   const relPathMap = useRef(new WeakMap<File, string>());
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -1106,8 +1117,23 @@ function FileManager() {
   };
 
   const filteredItems = (searchQuery ? searchResults : files).filter(item => {
-    if (selectedCategory === 'all') return true;
-    return item.category === selectedCategory;
+    if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+    if (dateFilter !== 'all') {
+      const t = getItemDate(item);
+      if (!t) return false;
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const DAY = 24 * 60 * 60 * 1000;
+      if (dateFilter === 'today') return t >= startOfToday;
+      if (dateFilter === '7d') return t >= startOfToday - 6 * DAY;
+      if (dateFilter === '30d') return t >= startOfToday - 29 * DAY;
+      if (dateFilter === 'year') return t >= new Date(now.getFullYear(), 0, 1).getTime();
+      if (dateFilter === 'custom') {
+        if (dateFrom && t < new Date(`${dateFrom}T00:00:00`).getTime()) return false;
+        if (dateTo && t > new Date(`${dateTo}T23:59:59.999`).getTime()) return false;
+      }
+    }
+    return true;
   });
 
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1115,6 +1141,8 @@ function FileManager() {
   useEffect(() => {
     setTotalPages(Math.ceil(filteredItems.length / itemsPerPage));
   }, [files, searchResults, searchQuery, selectedCategory, itemsPerPage, filteredItems.length]);
+
+  useEffect(() => { setCurrentPage(1); }, [dateFilter, dateFrom, dateTo, selectedCategory]);
 
   // Wrap matched substring in a bold span
   const highlightText = (text: string, query: string): React.ReactNode => {
@@ -1318,6 +1346,36 @@ function FileManager() {
                 </>
               )}
             </select>
+
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value as any)}
+              aria-label="Filter by date"
+              style={{ padding: '5px 10px', border: '1px solid', borderColor: dateFilter !== 'all' ? 'var(--ms-blue)' : 'var(--ms-neutral-30)', borderRadius: 4, fontSize: 13, color: 'var(--ms-neutral-110)', fontFamily: 'inherit', background: '#fff', cursor: 'pointer', outline: 'none' }}
+            >
+              <option value="all">Any date</option>
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="year">This year</option>
+              <option value="custom">Custom range…</option>
+            </select>
+
+            {dateFilter === 'custom' && (
+              <>
+                <input type="date" value={dateFrom} max={dateTo || undefined} onChange={e => setDateFrom(e.target.value)} aria-label="From date"
+                  style={{ padding: '4px 8px', border: '1px solid var(--ms-neutral-30)', borderRadius: 4, fontSize: 13, fontFamily: 'inherit', color: 'var(--ms-neutral-110)', background: '#fff' }} />
+                <span style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>to</span>
+                <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value)} aria-label="To date"
+                  style={{ padding: '4px 8px', border: '1px solid var(--ms-neutral-30)', borderRadius: 4, fontSize: 13, fontFamily: 'inherit', color: 'var(--ms-neutral-110)', background: '#fff' }} />
+              </>
+            )}
+
+            {dateFilter !== 'all' && (
+              <button onClick={() => { setDateFilter('all'); setDateFrom(''); setDateTo(''); }} style={fluentBtn('ghost')}>
+                <FiX style={{ width: 13, height: 13 }} /> Clear date
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1390,6 +1448,8 @@ function FileManager() {
                     ) : (
                       <p style={{ margin: 0, fontSize: 11, color: 'var(--ms-neutral-60)' }}>—</p>
                     )}
+
+                    <p style={{ margin: 0, fontSize: 11, color: 'var(--ms-neutral-60)' }}>{formatItemDate(item)}</p>
 
                     {item.category && (
                       <div style={{ marginTop: 2 }}>
@@ -1468,13 +1528,18 @@ function FileManager() {
                       <div style={{ width: 24, height: 24, flexShrink: 0 }} className={getFileColor(item)}>
                         {item.type === 'folder' ? <FaFolder style={{ width: 24, height: 24, color: '#FFB900' }} /> : getFileIcon(item.name)}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                        <span className="file-name-mobile" style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                        {item.isLocked && isAdmin && <FiLock style={{ width: 13, height: 13, color: 'var(--ms-red)', flexShrink: 0 }} />}
+                      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                          <span className="file-name-mobile" style={{ fontWeight: 500, color: 'var(--ms-neutral-160)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                          {item.isLocked && isAdmin && <FiLock style={{ width: 13, height: 13, color: 'var(--ms-red)', flexShrink: 0 }} />}
+                        </div>
+                        <span className="show-mobile" style={{ fontSize: 11, color: 'var(--ms-neutral-60)' }}>
+                          {formatItemDate(item)}{item.type !== 'folder' && item.size ? ` · ${formatBytes(item.size)}` : ''}
+                        </span>
                       </div>
                     </div>
                     <div className="hidden-mobile">{item.category && getCategoryBadge(item.category)}</div>
-                    <span className="hidden-mobile" style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.lastModified ? new Date(item.lastModified).toLocaleDateString() : '—'}</span>
+                    <span className="hidden-mobile" style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{formatItemDate(item)}</span>
                     <span className="hidden-mobile" style={{ fontSize: 12, color: 'var(--ms-neutral-60)' }}>{item.type === 'folder' ? 'Folder' : (item.size ? formatBytes(item.size) : '—')}</span>
                     <button onClick={e => handleMenuOpen(e, item)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ms-neutral-60)', padding: 4, borderRadius: 4 }}>
                       <FiMoreVertical style={{ width: 15, height: 15 }} />

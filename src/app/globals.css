@@ -119,6 +119,10 @@ body {
   align-items: center;
 }
 
+.show-mobile {
+  display: none;
+}
+
 /* Trash list grid (was previously undefined) */
 .trash-list-grid {
   display: grid;
@@ -146,6 +150,9 @@ iframe {
 }
 
 @media (max-width: 768px) {
+  .show-mobile {
+    display: block;
+  }
   .trash-list-grid {
     grid-template-columns: 1fr 44px;
   }
